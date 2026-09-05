@@ -1,0 +1,13 @@
+{
+  "name": "Лысый и менты 3D",
+  "short_name": "Лысый 3D",
+  "description": "3D-лабиринт: убегай от ментов и найди выход",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#05070c",
+  "theme_color": "#0b0e14",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
