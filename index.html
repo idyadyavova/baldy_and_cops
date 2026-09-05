@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Лысый и менты 3D</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root{
+    --gold:#ffc94d; --gold2:#ff9d2e; --ink:#0a0d13; --panel:rgba(14,18,28,.82);
+    --line:rgba(255,255,255,.14); --txt:#e9edf5; --dim:#9aa6bd; --red:#ff4d4d; --green:#57e08a;
+    --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#05070c;
+    font-family:'Trebuchet MS','Segoe UI',system-ui,-apple-system,sans-serif;color:var(--txt);
+    touch-action:none; user-select:none; -webkit-user-select:none; overscroll-behavior:none;}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  .layer{position:fixed;inset:0;display:none;flex-direction:column;z-index:10;}
+  .layer.on{display:flex;}
+  .center{align-items:center;justify-content:center;}
+
+  /* ---------- загрузка ---------- */
+  #loading{background:radial-gradient(120% 90% at 50% 10%,#16233d 0%,#080b12 60%,#05070c 100%);z-index:100;
+    align-items:center;justify-content:center;}
+  .logo{font-size:clamp(30px,9vw,64px);font-weight:900;letter-spacing:.5px;text-align:center;line-height:1.05;
+    background:linear-gradient(180deg,#fff2c9,var(--gold) 45%,var(--gold2));-webkit-background-clip:text;background-clip:text;
+    color:transparent;filter:drop-shadow(0 4px 18px rgba(255,160,40,.35));}
+  .logo small{display:block;font-size:.34em;letter-spacing:5px;color:var(--dim);-webkit-text-fill-color:var(--dim);margin-top:8px;font-weight:700}
+  .bar{width:min(72vw,340px);height:8px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden;margin-top:26px}
+  .bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--gold2),var(--gold));transition:width .25s}
+  #loadTxt{margin-top:12px;color:var(--dim);font-size:13px;letter-spacing:1px}
+
+  /* ---------- меню ---------- */
+  #menu{background:linear-gradient(180deg,rgba(5,8,14,.05) 0%,rgba(5,8,14,.22) 38%,rgba(5,8,14,.72) 100%);
+    align-items:center;justify-content:center;padding:calc(18px + var(--safe-t)) 18px calc(18px + var(--safe-b));}
+  .menuBox{width:min(94vw,430px);display:flex;flex-direction:column;align-items:center;gap:10px;
+    filter:drop-shadow(0 6px 26px rgba(0,0,0,.75))}
+  .btn{width:100%;padding:15px 18px;border-radius:16px;border:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+    color:var(--txt);font-size:17px;font-weight:700;letter-spacing:.4px;cursor:pointer;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);transition:transform .08s, background .15s;}
+  .btn:active{transform:scale(.975);background:rgba(255,255,255,.16)}
+  .btn.main{background:linear-gradient(180deg,var(--gold),var(--gold2));color:#251500;border-color:rgba(255,255,255,.35);
+    font-size:20px;padding:17px;justify-content:center;box-shadow:0 10px 30px -10px rgba(255,160,40,.6)}
+  .btn .val{color:var(--gold);font-weight:800}
+  .row{display:flex;gap:10px;width:100%}
+  .row .btn{flex:1;justify-content:center}
+  .hint{color:#c3cbdb;font-size:12.5px;line-height:1.5;text-align:center;margin-top:4px;text-shadow:0 2px 8px rgba(0,0,0,.85)}
+
+  /* ---------- панели ---------- */
+  .panel{width:min(94vw,430px);background:var(--panel);border:1px solid var(--line);border-radius:22px;
+    padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 30px 70px -30px #000; max-height:88vh; overflow:auto;}
+  .panel h2{margin:0 0 14px;font-size:20px;letter-spacing:.5px;text-align:center}
+  .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border-radius:13px;
+    background:rgba(255,255,255,.05);margin-bottom:9px;font-size:15px}
+  .seg{display:flex;gap:6px}
+  .seg button{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.05);
+    color:var(--dim);font-size:13px;font-weight:700;cursor:pointer}
+  .seg button.sel{background:linear-gradient(180deg,var(--gold),var(--gold2));color:#251500;border-color:transparent}
+  .skins{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .skin{aspect-ratio:1;border-radius:14px;border:2px solid var(--line);cursor:pointer;position:relative;overflow:hidden;
+    display:flex;align-items:flex-end;justify-content:center;font-size:10.5px;font-weight:700;padding-bottom:5px;color:#fff;
+    text-shadow:0 1px 3px #000}
+  .skin.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,201,77,.22)}
+
+  /* ---------- HUD ---------- */
+  #hud{z-index:5;pointer-events:none;}
+  #hud .top{position:absolute;top:calc(10px + var(--safe-t));left:calc(10px + var(--safe-l));right:calc(10px + var(--safe-r));
+    display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .chip{background:rgba(9,12,20,.62);border:1px solid var(--line);border-radius:13px;padding:6px 10px;
+    font-size:13.5px;font-weight:800;letter-spacing:.3px;white-space:nowrap;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;align-items:center;gap:7px}
+  .chip small{font-weight:600;color:var(--dim);font-size:11px;letter-spacing:1px}
+  #minimap{border-radius:14px;border:1px solid var(--line);background:rgba(9,12,20,.55);backdrop-filter:blur(8px)}
+  .iconBtn{pointer-events:auto;width:40px;height:40px;border-radius:14px;border:1px solid var(--line);
+    background:rgba(9,12,20,.62);color:var(--txt);font-size:19px;display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(8px);cursor:pointer}
+  #stick{position:absolute;left:calc(20px + var(--safe-l));bottom:calc(26px + var(--safe-b));width:132px;height:132px;
+    border-radius:50%;border:1.5px solid rgba(255,255,255,.18);background:rgba(10,14,22,.30);pointer-events:auto;
+    touch-action:none;opacity:.9}
+  #stick i{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.9),rgba(255,255,255,.35));box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  .actBtn{position:absolute;pointer-events:auto;border-radius:50%;border:1.5px solid rgba(255,255,255,.20);
+    background:rgba(10,14,22,.42);display:flex;align-items:center;justify-content:center;font-weight:800;
+    letter-spacing:.5px;backdrop-filter:blur(6px);touch-action:none}
+  #btnJump{right:calc(22px + var(--safe-r));bottom:calc(112px + var(--safe-b));width:78px;height:78px;font-size:13px}
+  #btnRun{right:calc(112px + var(--safe-r));bottom:calc(34px + var(--safe-b));width:70px;height:70px;font-size:12px}
+  .actBtn:active,.actBtn.on{background:rgba(255,201,77,.35);border-color:var(--gold)}
+  #stamina{position:absolute;right:calc(22px + var(--safe-r));bottom:calc(20px + var(--safe-b));width:78px;height:6px;
+    border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
+  #stamina i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--gold2),var(--gold))}
+  #alert{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
+    box-shadow:inset 0 0 120px 30px rgba(255,40,40,.55)}
+  #alertTxt{position:absolute;top:calc(74px + var(--safe-t));left:0;right:0;text-align:center;font-size:19px;font-weight:900;
+    color:#ff6b6b;text-shadow:0 2px 14px rgba(255,0,0,.7);opacity:0;transition:opacity .2s;letter-spacing:2px}
+  #toast{position:absolute;left:0;right:0;top:calc(50% - 40px);text-align:center;font-size:22px;font-weight:900;
+    color:var(--gold);text-shadow:0 3px 16px rgba(0,0,0,.8);opacity:0;transition:opacity .3s, transform .3s;transform:translateY(10px)}
+
+  /* ---------- итоги ---------- */
+  .big{font-size:30px;font-weight:900;text-align:center;margin-bottom:6px}
+  .stat{display:flex;justify-content:space-between;padding:9px 12px;border-radius:12px;background:rgba(255,255,255,.05);margin-bottom:8px;font-size:15px}
+  .stat b{color:var(--gold)}
+  #fps{position:absolute;left:calc(10px + var(--safe-l));bottom:calc(178px + var(--safe-b));font-size:11px;color:var(--dim);
+    background:rgba(0,0,0,.35);padding:3px 7px;border-radius:8px;display:none}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- ЗАГРУЗКА -->
+<div id="loading" class="layer on">
+  <div class="logo">ЛЫСЫЙ<br>И МЕНТЫ<small>3 D</small></div>
+  <div class="bar"><i id="loadBar"></i></div>
+  <div id="loadTxt">генерация текстур…</div>
+</div>
+
+<!-- ГЛАВНОЕ МЕНЮ -->
+<div id="menu" class="layer">
+  <div class="menuBox">
+    <div class="logo" style="font-size:clamp(26px,7.5vw,50px);margin-bottom:6px">ЛЫСЫЙ И МЕНТЫ<small>3 D · НАЙДИ ВЫХОД</small></div>
+    <button class="btn main" id="btnPlay">ИГРАТЬ</button>
+    <div class="row">
+      <button class="btn" id="btnChar">Персонаж</button>
+      <button class="btn" id="btnDiff">Сложность <span class="val" id="diffVal">Простой</span></button>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
+      <button class="btn" id="btnHelp">Как играть</button>
+    </div>
+    <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
+  </div>
+</div>
+
+<!-- ВЫБОР ПЕРСОНАЖА -->
+<div id="charPanel" class="layer" style="align-items:center;justify-content:flex-end;padding-bottom:calc(26px + var(--safe-b))">
+  <div class="panel">
+    <h2>Выбор персонажа</h2>
+    <div class="skins" id="skinList"></div>
+    <div class="hint" id="skinName">Лысый</div>
+    <button class="btn main" style="margin-top:12px" id="charOk">Готово</button>
+  </div>
+</div>
+
+<!-- НАСТРОЙКИ ГРАФИКИ -->
+<div id="gfxPanel" class="layer center">
+  <div class="panel">
+    <h2>Графика</h2>
+    <div class="opt">Качество
+      <div class="seg" id="segQ">
+        <button data-q="low">Низк.</button><button data-q="medium">Сред.</button>
+        <button data-q="high">Выс.</button><button data-q="ultra">Ультра</button>
+      </div>
+    </div>
+    <div class="opt">Объёмные лучи <div class="seg" id="segRays"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
+    <div class="opt">Затенение SSAO <div class="seg" id="segAO"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
+    <div class="opt">Свечение (bloom) <div class="seg" id="segBloom"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
+    <div class="opt">Показывать FPS <div class="seg" id="segFps"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
+    <div class="hint">На слабом телефоне выбирай «Низк.» или «Сред.»</div>
+    <button class="btn main" style="margin-top:12px" id="gfxOk">Готово</button>
+  </div>
+</div>
+
+<!-- ПОМОЩЬ -->
+<div id="helpPanel" class="layer center">
+  <div class="panel">
+    <h2>Как играть</h2>
+    <div class="stat"><span>Джойстик слева</span><b>идти</b></div>
+    <div class="stat"><span>Палец по экрану справа</span><b>камера</b></div>
+    <div class="stat"><span>Кнопка «БЕГ»</span><b>ускорение</b></div>
+    <div class="stat"><span>Кнопка «ПРЫЖОК»</span><b>перепрыгнуть</b></div>
+    <div class="stat"><span>Золотые монеты</span><b>очки</b></div>
+    <div class="stat"><span>Зелёный портал</span><b>выход</b></div>
+    <div class="hint">Менты ищут тебя по лабиринту. Если увидят — побегут напрямую.<br>
+      На клавиатуре: WASD, Shift — бег, Пробел — прыжок, Esc — пауза.</div>
+    <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="layer">
+  <div class="top">
+    <div style="display:flex;gap:8px;align-items:flex-start">
+      <div class="iconBtn" id="btnPause">II</div>
+      <div class="chip"><small>⏱</small><span id="hudTime">00:00</span></div>
+      <div class="chip"><small>◉</small><span id="hudCoins">0/0</span></div>
+    </div>
+    <canvas id="minimap" width="150" height="150" style="width:78px;height:78px;flex:none"></canvas>
+  </div>
+  <div id="stick"><i></i></div>
+  <div class="actBtn" id="btnJump">ПРЫЖОК</div>
+  <div class="actBtn" id="btnRun">БЕГ</div>
+  <div id="stamina"><i></i></div>
+  <div id="alert"></div>
+  <div id="alertTxt">ТЕБЯ ЗАМЕТИЛИ!</div>
+  <div id="toast"></div>
+  <div id="fps">0 fps</div>
+</div>
+
+<!-- ПАУЗА -->
+<div id="pausePanel" class="layer center">
+  <div class="panel">
+    <h2>Пауза</h2>
+    <button class="btn main" id="pResume">Продолжить</button>
+    <div class="row" style="margin-top:9px">
+      <button class="btn" id="pRestart">Заново</button>
+      <button class="btn" id="pMenu">В меню</button>
+    </div>
+    <div class="row" style="margin-top:9px"><button class="btn" id="pGfx">Графика</button></div>
+  </div>
+</div>
+
+<!-- ФИНАЛ -->
+<div id="endPanel" class="layer center">
+  <div class="panel">
+    <div class="big" id="endTitle">ПОБЕДА!</div>
+    <div class="hint" id="endSub" style="margin-bottom:14px">Ты нашёл выход</div>
+    <div class="stat"><span>Время</span><b id="endTime">00:00</b></div>
+    <div class="stat"><span>Монеты</span><b id="endCoins">0</b></div>
+    <div class="stat"><span>Лучшее время</span><b id="endBest">—</b></div>
+    <button class="btn main" style="margin-top:12px" id="endAgain">Ещё раз</button>
+    <div class="row" style="margin-top:9px"><button class="btn" id="endMenu">В меню</button></div>
+  </div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script>
+  // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
+  if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
+</script>
+<script src="src/noise.js"></script>
+<script src="src/textures.js"></script>
+<script src="src/shaderlib.js"></script>
+<script src="src/sky.js"></script>
+<script src="src/materials.js"></script>
+<script src="src/world.js"></script>
+<script src="src/water.js"></script>
+<script src="src/character.js"></script>
+<script src="src/props.js"></script>
+<script src="src/particles.js"></script>
+<script src="src/post.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/maps.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
