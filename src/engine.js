@@ -165,10 +165,12 @@
 
       _swap.length = 0;
       scene.traverse(function (o) {
+        var drawable = o.isMesh || o.isPoints || o.isLine || o.isSprite;
+        if (!drawable) return;
         if (o.isMesh && o.userData.depthMat && o.visible) {
           _swap.push([o, o.material]);
           o.material = o.userData.depthMat;
-        } else if (o.isMesh && !o.userData.depthMat) {
+        } else if (!o.userData.depthMat) {
           o.userData._hidden = o.visible;
           o.visible = false;
         }
@@ -178,7 +180,7 @@
       renderer.render(scene, sunCam);
       for (var i = 0; i < _swap.length; i++) _swap[i][0].material = _swap[i][1];
       scene.traverse(function (o) {
-        if (o.isMesh && !o.userData.depthMat && o.userData._hidden !== undefined) {
+        if (o.userData._hidden !== undefined) {
           o.visible = o.userData._hidden; o.userData._hidden = undefined;
         }
       });

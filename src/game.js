@@ -116,7 +116,8 @@
 
   function resize() {
     var w = window.innerWidth, h = window.innerHeight;
-    var dpr = Math.min(window.devicePixelRatio || 1, CFG.quality === 'low' ? 1.0 : 1.6);
+    var cap = { low: 1.0, medium: 1.25, high: 1.5, ultra: 1.75 }[CFG.quality] || 1.4;
+    var dpr = Math.min(window.devicePixelRatio || 1, cap);
     var cv = $('gl');
     cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
@@ -256,8 +257,17 @@
       });
     }
 
+    // пылинки в воздухе / светлячки ночью
+    var moteCount = { low: 0, medium: 220, high: 380, ultra: 550 }[eng.quality] || 300;
+    var motes = null;
+    if (moteCount > 0) {
+      motes = global.PARTICLES.createMotes(THREE, eng.common, moteCount, 30);
+      motes.uniforms.uNight.value = eng.isNight ? 1 : 0;
+      eng.scene.add(motes.points); objects.push(motes.points);
+    }
+
     S.level = {
-      world: world, objects: objects, water: water, exit: { x: ex.x, z: ex.z, cell: exitCell, obj: exitObj },
+      world: world, objects: objects, motes: motes, water: water, exit: { x: ex.x, z: ex.z, cell: exitCell, obj: exitObj },
       cellToWorld: cellToWorld, lanterns: lanterns, diff: diff,
       explored: new Uint8Array(world.cells.w * world.cells.h)
     };
@@ -265,6 +275,7 @@
 
     // погода и время суток
     eng.setTimeOfDay(D.sun, D.azim, D.cloud);
+    if (S.level && S.level.motes) S.level.motes.uniforms.uNight.value = eng.isNight ? 1 : 0;
     eng.shadowRadius = 30;
 
     spawnActors();
@@ -878,7 +889,8 @@
     if (fp) {
       _look.set(p.x + sy * 6, p.y + 1.60 - Math.sin(pitch) * 4.5, p.z + cy * 6);
     } else {
-      _look.set(p.x, p.y + 1.28 - squeeze * 0.18, p.z);
+      // при отрицательном наклоне смотрим выше — чтобы было видно небо и солнце
+      _look.set(p.x, p.y + 1.28 - Math.min(0, pitch) * 3.0 - squeeze * 0.18, p.z);
     }
     eng.camera.lookAt(_look);
     eng.shadowTarget.set(p.x, p.y, p.z);
@@ -1063,6 +1075,7 @@
     last = now;
     var eng = S.eng;
     eng.common.uTime.value += dt;
+    if (S.level && S.level.motes) S.level.motes.uniforms.uPixel.value = eng.rtH ? eng.rtH * 0.55 : 600;
 
     if (S.screen === 'game' && !S.paused) {
       S.time += dt;

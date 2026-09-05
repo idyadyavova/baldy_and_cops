@@ -167,8 +167,8 @@
     '  float smu = dot(dir, uSunPos);',
     '  float sunDisc = smoothstep(uSunSize, uSunSize * 0.55, acos(clamp(smu, -1.0, 1.0)));',
     '  float above = smoothstep(-0.09, 0.02, uSunPos.y);',
-    '  sky += uSunCol * sunDisc * 14.0 * above;',
-    '  sky += uSunCol * pow(max(smu,0.0), 900.0) * 6.0 * above;',
+    '  sky += uSunCol * sunDisc * 9.0 * above;',
+    '  sky += uSunCol * pow(max(smu,0.0), 900.0) * 3.5 * above;',
     '',
     // облака: три слоя с параллаксом
     '  vec4 c1 = cloudLayer(dir, 1.0, 1.30, uCloudCover + 0.10, 0.34, 0.010, 6);',

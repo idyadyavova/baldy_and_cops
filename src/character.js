@@ -86,12 +86,12 @@
 
   // ---- палитры ---------------------------------------------------
   var SKINS = [
-    { name: 'Лысый', skin: 0xe8a68a, suit: 0xc0392b, suitDark: 0x7d2018, pants: 0x2b3a55, shoe: 0xf0f0f0, stripe: 0xf5f5f5, brow: 0x3a2a22 },
-    { name: 'Синий', skin: 0xd99b7d, suit: 0x2b6cb0, suitDark: 0x1c4a7d, pants: 0x22304a, shoe: 0x2c2c2c, stripe: 0xe8e8e8, brow: 0x2a2018 },
-    { name: 'Зелёный', skin: 0xf0b48f, suit: 0x2f8f5b, suitDark: 0x1d6440, pants: 0x333a2a, shoe: 0xdcdcdc, stripe: 0xf2f2f2, brow: 0x4a3020 },
-    { name: 'Чёрный', skin: 0xc98a68, suit: 0x2a2a30, suitDark: 0x18181c, pants: 0x1a1a20, shoe: 0xb03030, stripe: 0xd0d0d0, brow: 0x18120c }
+    { name: 'Лысый', skin: 0xe8a68a, suit: 0xc0392b, suitDark: 0x7d2018, pants: 0x3f5478, shoe: 0xf0f0f0, stripe: 0xf5f5f5, brow: 0x3a2a22 },
+    { name: 'Синий', skin: 0xd99b7d, suit: 0x2b6cb0, suitDark: 0x1c4a7d, pants: 0x35476b, shoe: 0x2c2c2c, stripe: 0xe8e8e8, brow: 0x2a2018 },
+    { name: 'Зелёный', skin: 0xf0b48f, suit: 0x2f8f5b, suitDark: 0x1d6440, pants: 0x4a5240, shoe: 0xdcdcdc, stripe: 0xf2f2f2, brow: 0x4a3020 },
+    { name: 'Чёрный', skin: 0xc98a68, suit: 0x2a2a30, suitDark: 0x18181c, pants: 0x2e2e38, shoe: 0xb03030, stripe: 0xd0d0d0, brow: 0x18120c }
   ];
-  var COP = { name: 'Мент', skin: 0xd9a184, suit: 0x3f5f96, suitDark: 0x27395c, pants: 0x2a3a5c, shoe: 0x232323, stripe: 0xd8d8d8, brow: 0x241a12 };
+  var COP = { name: 'Мент', skin: 0xd9a184, suit: 0x3f5f96, suitDark: 0x27395c, pants: 0x3a4d72, shoe: 0x232323, stripe: 0xd8d8d8, brow: 0x241a12 };
 
   function mats(THREE, common, pal, isCop) {
     var MAT = global.MAT;

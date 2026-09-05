@@ -138,7 +138,7 @@
       '  float w = max(soft, l - uThreshold) / max(l, 1e-4);',
       '  outColor = vec4(c * w, 1.0);',
       '}'
-    ].join('\n'), { uTex: { value: null }, uThreshold: { value: 1.0 }, uKnee: { value: 0.6 } });
+    ].join('\n'), { uTex: { value: null }, uThreshold: { value: 1.15 }, uKnee: { value: 0.55 } });
 
     var blurPass = new Pass(THREE, [
       'precision highp float; in vec2 vUv; out vec4 outColor;',
@@ -181,7 +181,7 @@
       '  float l = max(c.r, max(c.g, c.b));',
       '  float m = sky * smoothstep(0.75, 2.2, l);',
       '  float dist = length((vUv - uSunUv) * vec2(1.0, 0.62));',
-      '  m *= exp(-dist * 2.2);',
+      '  m *= exp(-dist * 3.0);',
       '  outColor = vec4(c * m, 1.0);',
       '}'
     ].join('\n'), { uScene: { value: null }, uDepth: { value: sceneRT.depthTexture }, uSunUv: { value: new THREE.Vector2(0.5, 0.5) }, uSunCol: { value: new THREE.Color() } });
@@ -246,7 +246,7 @@
     ].join('\n'), {
       uScene: { value: null }, uBloom: { value: null }, uRays: { value: null }, uDepth: { value: sceneRT.depthTexture },
       uExposure: { value: 1.0 }, uBloomAmt: { value: 0.55 }, uRaysAmt: { value: 0.5 },
-      uTime: { value: 0 }, uVignette: { value: 0.38 }, uGrain: { value: 0.011 }, uChroma: { value: 0 },
+      uTime: { value: 0 }, uVignette: { value: 0.26 }, uGrain: { value: 0.011 }, uChroma: { value: 0 },
       uSaturation: { value: 1.18 }, uContrast: { value: 1.13 }, uAberration: { value: 0.0075 },
       uLift: { value: new THREE.Vector3(0.008, 0.010, 0.020) },
       uGain: { value: new THREE.Vector3(1.02, 1.0, 0.98) },
@@ -282,7 +282,7 @@
       sceneRT: sceneRT,
       settings: {
         bloom: true, rays: true, ssao: true, fxaa: true,
-        bloomAmt: 0.55, raysAmt: 0.55, ssaoAmt: 0.75, exposure: 1.0
+        bloomAmt: 0.50, raysAmt: 0.40, ssaoAmt: 0.75, exposure: 1.0
       },
       comp: compPass, ssao: ssaoPass, rays: rayBlurPass, bright: brightPass,
       setSize: function (w, h, ratio) {
