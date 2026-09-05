@@ -71,6 +71,10 @@
   // ------------------------------------------------------------------
   function boot() {
     loadCfg();
+    if (!window.THREE) {
+      $('loadTxt').innerHTML = 'Не загрузилась библиотека three.js.<br>Проверь интернет и обнови страницу.';
+      return;
+    }
     var canvas = $('gl');
     if (!canvas.getContext('webgl2')) {
       $('loadTxt').innerHTML = 'Нужен браузер с WebGL 2.<br>Открой в Chrome или Safari посвежее.';

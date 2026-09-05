@@ -232,7 +232,11 @@
   </div>
 </div>
 
-<script src="vendor/three.min.js"></script>
+<script src="lib/three.min.js"></script>
+<script>
+  // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
+  if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
+</script>
 <script src="src/noise.js"></script>
 <script src="src/textures.js"></script>
 <script src="src/shaderlib.js"></script>
