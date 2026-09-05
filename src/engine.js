@@ -131,7 +131,7 @@
       common.uFogCol.value.setRGB(p.fog[0], p.fog[1], p.fog[2]);
       common.uFogSunCol.value.setRGB(p.fogSun[0], p.fogSun[1], p.fogSun[2]);
       common.uShadowStrength.value = night ? 0.55 : 1.0;
-      post.settings.exposure = p.exposure * eng.exposureBias;
+      post.settings.exposure = p.exposure * eng.exposureBias * (post.hdr ? 1.0 : 0.72);
       eng.palette = p;
       eng.isNight = night;
     };

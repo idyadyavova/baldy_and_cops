@@ -13,9 +13,9 @@
   var TILES = {
     GRASS_TOP: 0, GRASS_SIDE: 1, DIRT: 2, ROCK: 3, COBBLE: 4, SAND: 5,
     PLANKS: 6, BARK: 7, LOG_TOP: 8, LEAVES: 9, BRICK: 10, GRAVEL: 11,
-    ROOF: 12, HEDGE: 13, FLAGSTONE: 14, MUD: 15, TALL_GRASS: 16, BUSH: 17
+    ROOF: 12, HEDGE: 13, FLAGSTONE: 14, MUD: 15, TALL_GRASS: 16, BUSH: 17, VINE: 18
   };
-  var TILE_COUNT = 18;
+  var TILE_COUNT = 19;
 
   // ---------------------------------------------------------------
   //  Холст одного тайла
@@ -419,9 +419,9 @@
       var id = N.hash2(col, row, seed);
       var grain = N.fbm(u * 40, v * 40, 40, seed + row * 7 + col * 13, 4);
       var blotch = N.fbm(u * 12, v * 12, 12, seed + 3, 4);
-      var r = lerp(0.26, 0.44, id) * (0.80 + 0.40 * grain) * (0.88 + 0.26 * blotch);
-      var g = lerp(0.105, 0.165, id) * (0.82 + 0.36 * grain);
-      var b = lerp(0.075, 0.115, id) * (0.82 + 0.36 * grain);
+      var r = lerp(0.20, 0.34, id) * (0.80 + 0.40 * grain) * (0.86 + 0.30 * blotch);
+      var g = lerp(0.098, 0.150, id) * (0.82 + 0.36 * grain) * (0.92 + 0.18 * blotch);
+      var b = lerp(0.080, 0.118, id) * (0.82 + 0.36 * grain);
       var h = 0.72 + 0.12 * grain;
       var rough = 0.86;
       // сколотые края
@@ -578,6 +578,50 @@
     T.bump = 1.2; T.aoStrength = 1.2;
   }
 
+  // Плющ: свисающие плети с листьями, много прозрачности
+  function genVine(T, seed) {
+    var S = T.S, rnd = N.mulberry32(seed);
+    for (var i = 0; i < S * S; i++) { T.al[i] = 0; T.h[i] = 0.4; T.rg[i] = 0.86; }
+    function leaf(cx, cy, rad, ang, tone) {
+      var ca = Math.cos(ang), sa = Math.sin(ang);
+      var R = Math.ceil(rad * 1.7);
+      for (var dy = -R; dy <= R; dy++) for (var dx = -R; dx <= R; dx++) {
+        var lx = (dx * ca + dy * sa) / rad, ly = (-dx * sa + dy * ca) / (rad * 0.55);
+        var e = lx * lx + ly * ly + Math.abs(lx) * 0.35 - 0.12;
+        if (e > 1) continue;
+        var f = 1 - e;
+        var vein = Math.abs(ly) < 0.16 ? 0.5 : 0;
+        var shd = 0.68 + 0.55 * f;
+        var r = lerp(0.06, 0.22, tone) * shd, g = lerp(0.22, 0.48, tone) * shd, b = lerp(0.04, 0.11, tone) * shd;
+        if (vein > 0) { r *= 1.35; g *= 1.28; b *= 1.2; }
+        var px = Math.round(cx + dx), py = Math.round(cy + dy);
+        T.set(px, py, r, g, b, 0.35 + 0.5 * f, 0.85, 1);
+      }
+    }
+    // 4-6 плетей сверху вниз
+    var strands = 4 + Math.floor(rnd() * 3);
+    for (var s2 = 0; s2 < strands; s2++) {
+      var x = (0.08 + rnd() * 0.84) * S;
+      var len = (0.45 + rnd() * 0.55) * S;
+      var drift = (rnd() - 0.5) * 0.5;
+      var tone = rnd();
+      for (var y = S - 1; y > S - 1 - len; y--) {
+        var f = (S - 1 - y) / len;
+        var cx = x + Math.sin(f * 5.5 + s2) * S * 0.045 + drift * f * S * 0.12;
+        // стебель
+        for (var w = -1; w <= 1; w++) {
+          T.set(Math.round(cx + w), y, 0.09 + 0.05 * tone, 0.17 + 0.07 * tone, 0.05, 0.5, 0.9, 1);
+        }
+        // листья через интервал
+        if ((S - 1 - y) % Math.round(6 + rnd() * 6) === 0) {
+          var side = rnd() < 0.5 ? -1 : 1;
+          leaf(cx + side * S * 0.035, y, S * (0.030 + rnd() * 0.03), side * (0.5 + rnd() * 0.9), tone * 0.7 + rnd() * 0.3);
+        }
+      }
+    }
+    T.bump = 1.6; T.aoStrength = 1.6;
+  }
+
   // Куст: плотная округлая масса листвы на прозрачном фоне
   function genBush(T, seed) {
     genLeaves(T, seed + 17, true);
@@ -654,7 +698,7 @@
     ['PLANKS', genPlanks], ['BARK', genBark], ['LOG_TOP', genLogTop],
     ['LEAVES', function (T, s) { genLeaves(T, s, false); }], ['BRICK', genBrick], ['GRAVEL', genGravel],
     ['ROOF', genRoof], ['HEDGE', genHedge], ['FLAGSTONE', genFlagstone], ['MUD', genMud],
-    ['TALL_GRASS', genTallGrass], ['BUSH', genBush]
+    ['TALL_GRASS', genTallGrass], ['BUSH', genBush], ['VINE', genVine]
   ];
 
   // Пошаговый сборщик — чтобы показывать прогресс загрузки без фризов

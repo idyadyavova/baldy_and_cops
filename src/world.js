@@ -125,11 +125,12 @@
   };
 
   // произвольный квад (кресты травы, флаги и т.п.)
-  Mesher.prototype.rawQuad = function (p0, p1, p2, p3, nrm, tile, ao, windTop) {
+  Mesher.prototype.rawQuad = function (p0, p1, p2, p3, nrm, tile, ao, windTop, windBottom) {
     var base = this.count;
     var pts = [p0, p1, p2, p3];
     var uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
-    var wind = [0, 0, windTop, windTop];
+    var wb = windBottom || 0;
+    var wind = [wb, wb, windTop, windTop];
     for (var i = 0; i < 4; i++) {
       this.pos.push(pts[i][0], pts[i][1], pts[i][2]);
       this.nrm.push(nrm[0], nrm[1], nrm[2]);
@@ -174,6 +175,43 @@
             [ox - cx, oy, oz - cz], [ox + cx, oy, oz + cz],
             [ox + cx, oy + hgt, oz + cz], [ox - cx, oy + hgt, oz - cz],
             [Math.sin(ang), 0, -Math.cos(ang)], tile, 1.0, 1.0);
+        }
+      }
+    }
+  }
+
+  // Плющ и свисающая зелень на стенах лабиринта
+  function addWallVines(M, world, TILES, density) {
+    var rnd = N.mulberry32(90210);
+    var W = world.cells.w, H = world.cells.h;
+    var top = BASE + (world.wallH || 3) + 1;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (var r = 0; r < H; r++) {
+      for (var c = 0; c < W; c++) {
+        if (!world.wallGrid[r][c]) continue;
+        for (var d = 0; d < 4; d++) {
+          var nc = c + dirs[d][0], nr = r + dirs[d][1];
+          if (nc < 0 || nr < 0 || nc >= W || nr >= H) continue;
+          if (world.wallGrid[nr][nc]) continue;         // соседняя клетка тоже стена
+          if (rnd() > density) continue;
+          var bx = world.mazeX0 + c * CELL, bz = world.mazeZ0 + r * CELL;
+          var n = 1 + (rnd() < 0.5 ? 1 : 0);
+          for (var k = 0; k < n; k++) {
+            var w = 0.55 + rnd() * 0.75;
+            var h = 0.9 + rnd() * 1.5;
+            var off = rnd() * (CELL - w);
+            var eps = 0.045;
+            var x0, z0, x1, z1, nx, nz;
+            if (dirs[d][0] === 1) { x0 = x1 = bx + CELL + eps; z0 = bz + off; z1 = z0 + w; nx = 1; nz = 0; }
+            else if (dirs[d][0] === -1) { x0 = x1 = bx - eps; z0 = bz + off + w; z1 = bz + off; nx = -1; nz = 0; }
+            else if (dirs[d][1] === 1) { z0 = z1 = bz + CELL + eps; x0 = bx + off + w; x1 = bx + off; nx = 0; nz = 1; }
+            else { z0 = z1 = bz - eps; x0 = bx + off; x1 = x0 + w; nx = 0; nz = -1; }
+            var yTop = top - 0.05 - rnd() * 0.35;
+            var yBot = yTop - h;
+            M.rawQuad(
+              [x0, yBot, z0], [x1, yBot, z1], [x1, yTop, z1], [x0, yTop, z0],
+              [nx, 0, nz], TILES.VINE, 0.92, 0.0, 0.9);
+          }
         }
       }
     }
@@ -312,9 +350,10 @@
           if (wall) {
             // основание — камень/булыжник, верх — живая изгородь
             var stoneH = kind > 0.52 ? wallH : Math.max(1, wallH - 2);
+            var stoneId = kind > 0.72 ? B.BRICK.id : (kind > 0.60 ? B.ROCK.id : B.COBBLE.id);
             for (var y3 = BASE + 1; y3 <= BASE + wallH; y3++) {
               var t;
-              if (y3 <= BASE + stoneH) t = (kind > 0.62 ? B.ROCK.id : B.COBBLE.id);
+              if (y3 <= BASE + stoneH) t = stoneId;
               else t = B.HEDGE.id;
               vol.set(wx, y3, wz, t);
             }
@@ -391,7 +430,7 @@
 
   global.WORLD = {
     init: init, generate: generate, buildMesh: buildMesh, Volume: Volume,
-    addGrassTufts: addGrassTufts,
+    addGrassTufts: addGrassTufts, addWallVines: addWallVines,
     Mesher: Mesher, CELL: CELL, BASE: BASE, WATER: WATER, MARGIN: MARGIN,
     blocks: function () { return B; }
   };

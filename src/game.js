@@ -165,6 +165,7 @@
     var world = global.WORLD.generate(THREE, map, 1000 + diff * 77, {});
     var mesh = global.WORLD.buildMesh(THREE, world.vol, B, true);
     global.WORLD.addGrassTufts(mesh.foliage, world, global.TEX.TILES, eng.Q.grass);
+    global.WORLD.addWallVines(mesh.foliage, world, global.TEX.TILES, Math.min(0.5, eng.Q.grass * 0.42));
 
     if (!S.blockMat) {
       S.blockMat = global.MAT.makeBlockMaterial(THREE, eng.common, S.tex);

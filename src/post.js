@@ -43,7 +43,10 @@
   function create(THREE, renderer, opts) {
     var pixelRatio = 1;
     var W = 2, H = 2;
-    var half = THREE.HalfFloatType;
+    // не везде можно рендерить в float-буфер (старые iOS) — тогда работаем в 8 бит
+    var canFloat = renderer.extensions.has('EXT_color_buffer_float') ||
+                   renderer.extensions.has('EXT_color_buffer_half_float');
+    var half = canFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
 
     function makeRT(w, h, o) {
       var rt = new THREE.WebGLRenderTarget(Math.max(2, Math.floor(w)), Math.max(2, Math.floor(h)), Object.assign({
@@ -280,6 +283,7 @@
 
     var api = {
       sceneRT: sceneRT,
+      hdr: canFloat,
       settings: {
         bloom: true, rays: true, ssao: true, fxaa: true,
         bloomAmt: 0.50, raysAmt: 0.40, ssaoAmt: 0.75, exposure: 1.0
