@@ -112,9 +112,10 @@
     var blurAOPass = new Pass(THREE, [
       'precision highp float; in vec2 vUv; out vec4 outColor;',
       'uniform sampler2D uTex; uniform vec2 uDir;',
-      'void main(){ float s = 0.0;',
-      '  for (int i = -3; i <= 3; i++) s += texture(uTex, vUv + uDir * float(i)).r;',
-      '  outColor = vec4(vec3(s / 7.0), 1.0); }'
+      'void main(){ float s = 0.0, w = 0.0;',
+      '  for (int i = -4; i <= 4; i++) { float k = 1.0 - abs(float(i)) / 5.5;',
+      '    s += texture(uTex, vUv + uDir * float(i)).r * k; w += k; }',
+      '  outColor = vec4(vec3(s / w), 1.0); }'
     ].join('\n'), { uTex: { value: null }, uDir: { value: new THREE.Vector2() } });
 
     // ---------- применение AO к сцене ----------
@@ -286,7 +287,7 @@
       hdr: canFloat,
       settings: {
         bloom: true, rays: true, ssao: true, fxaa: true,
-        bloomAmt: 0.50, raysAmt: 0.40, ssaoAmt: 0.75, exposure: 1.0
+        bloomAmt: 0.50, raysAmt: 0.40, ssaoAmt: 0.62, exposure: 1.0
       },
       comp: compPass, ssao: ssaoPass, rays: rayBlurPass, bright: brightPass,
       setSize: function (w, h, ratio) {
@@ -315,10 +316,10 @@
           ssaoPass.material.uniforms.uRes.value.set(W >> 1, H >> 1);
           ssaoPass.render(renderer, aoRT);
           blurAOPass.material.uniforms.uTex.value = aoRT.texture;
-          blurAOPass.material.uniforms.uDir.value.set(1.4 / (W >> 1), 0);
+          blurAOPass.material.uniforms.uDir.value.set(2.1 / (W >> 1), 0);
           blurAOPass.render(renderer, aoBlurRT);
           blurAOPass.material.uniforms.uTex.value = aoBlurRT.texture;
-          blurAOPass.material.uniforms.uDir.value.set(0, 1.4 / (H >> 1));
+          blurAOPass.material.uniforms.uDir.value.set(0, 2.1 / (H >> 1));
           blurAOPass.render(renderer, aoRT);
           applyAOPass.material.uniforms.uScene.value = sceneRT.texture;
           applyAOPass.material.uniforms.uAO.value = aoRT.texture;
