@@ -49,8 +49,12 @@
     ['GRASS', 'Трава'], ['DIRT', 'Земля'], ['ROCK', 'Камень'], ['COBBLE', 'Булыжник'],
     ['FLAG', 'Плитняк'], ['BRICK', 'Кирпич'], ['PLANKS', 'Доски'], ['LOG', 'Бревно'],
     ['LEAVES', 'Листва'], ['HEDGE', 'Кусты'], ['SAND', 'Песок'], ['GRAVEL', 'Гравий'],
-    ['ROOF', 'Черепица'], ['MUD', 'Грязь']
+    ['ROOF', 'Черепица'], ['MUD', 'Грязь'], ['GLASS', 'Стекло'], ['LAMP', 'Лампа'],
+    ['WOOL_WHITE', 'Белая шерсть'], ['WOOL_RED', 'Красная шерсть'], ['WOOL_BLUE', 'Синяя шерсть'],
+    ['WOOL_YELLOW', 'Жёлтая шерсть'], ['WOOL_GREEN', 'Зелёная шерсть'], ['WOOL_BLACK', 'Чёрная шерсть']
   ];
+  // время суток в творческом: утро, день, закат, ночь
+  var TIMES = [[0.30, 'УТРО'], [0.62, 'ДЕНЬ'], [0.085, 'ЗАКАТ'], [-0.40, 'НОЧЬ']];
 
   // ------------------------------------------------------------------
   //  Состояние
@@ -242,7 +246,8 @@
       : (D.parkour
         ? global.WORLD.generateParkour(THREE, 5100 + diff)
         : global.WORLD.generate(THREE, global.MAPS[D.map], 1000 + diff * 77, { wallHeight: 2 }));
-    if (D.creative) { S.edits = loadBuild(); applyEdits(world); }
+    if (D.creative) { S.edits = loadBuild(); applyEdits(world); collectLamps(); }
+    else S.lamps = [];
     var mesh = D.creative
       ? { solid: new global.WORLD.Mesher(), foliage: new global.WORLD.Mesher() }
       : global.WORLD.buildMesh(THREE, world.vol, B, true);
@@ -469,7 +474,8 @@
       z0: j * CHUNK, z1: Math.min(L.world.sz, (j + 1) * CHUNK)
     };
     var m = global.WORLD.buildMesh(THREE, L.world.vol, global.WORLD.blocks(), true, b);
-    global.WORLD.addGrassTufts(m.foliage, L.world, global.TEX.TILES, eng.Q.grass, b);
+    // на открытом острове трава реже: не закрывает стройку и легче для телефона
+    global.WORLD.addGrassTufts(m.foliage, L.world, global.TEX.TILES, eng.Q.grass * 0.55, b);
     ['solid', 'foliage'].forEach(function (key) {
       if (ch[key]) { eng.scene.remove(ch[key]); ch[key].geometry.dispose(); ch[key] = null; }
     });
@@ -572,6 +578,7 @@
     if (bx < 0 || bz < 0 || by < 0 || bx >= w.sx || bz >= w.sz || by >= w.sy) return false;
     w.vol.set(bx, by, bz, id);
     S.edits[bx + ',' + by + ',' + bz] = id;
+    collectLamps();
     touchBlock(bx, bz);
     scheduleSave();
     return true;
@@ -599,6 +606,19 @@
         by + 1 > p.y + 0.02 && by < p.y + PH - 0.02) return;
     editBlock(bx, by, bz, S.blockId);
     global.SFX.land();
+  }
+
+  // все поставленные лампы — источники света
+  function collectLamps() {
+    var B = global.WORLD.blocks();
+    var lampId = B.LAMP ? B.LAMP.id : -1;
+    var list = [];
+    for (var k in S.edits) {
+      if (S.edits[k] !== lampId) continue;
+      var q = k.split(',');
+      list.push({ x: +q[0] + 0.5, y: +q[1] + 0.5, z: +q[2] + 0.5 });
+    }
+    S.lamps = list;
   }
 
   // ---- сохранение постройки ----
@@ -780,6 +800,7 @@
         var dn = parseInt(k.slice(5), 10);
         if (dn >= 1 && dn <= 9) selectSlot(dn - 1);
       }
+      if (S.creative && (k === 'KeyT' || key === 't' || key === 'е')) cycleTime();
       if (S.creative && (k === 'KeyQ' || key === 'q' || key === 'й')) selectSlot((S.slot || 0) - 1);
       if (S.creative && (k === 'KeyE' || key === 'e' || key === 'у')) selectSlot((S.slot || 0) + 1);
       // смена вида: F5 как в майне (перезагрузку браузера гасим) или V
@@ -861,7 +882,7 @@
             if (m.uniforms.uAlbedo) m.uniforms.uAlbedo.value = t.albedo;
             if (m.uniforms.uNormalMap) m.uniforms.uNormalMap.value = t.normal;
             if (m.uniforms.uMatMap) m.uniforms.uMatMap.value = t.matmap;
-            if (m.uniforms.uParaScale) m.uniforms.uParaScale.value.set(t.paraScales.subarray(0, 24));
+            if (m.uniforms.uParaScale) m.uniforms.uParaScale.value.set(t.paraScales.subarray(0, 32));
           });
         }
       }
@@ -915,6 +936,9 @@
         if (t.clientX < window.innerWidth * 0.42) continue;
         if (input.lookId !== null) continue;
         input.lookId = t.identifier; input.lookX = t.clientX; input.lookY = t.clientY;
+        // для творческого: запоминаем, где и когда палец коснулся
+        input.tapT = performance.now(); input.tapX = t.clientX; input.tapY = t.clientY;
+        input.tapMoved = false; input.tapBreaking = false;
       }
     }
     function lookMove(e) {
@@ -923,13 +947,25 @@
         if (t.identifier !== input.lookId) continue;
         var dx = t.clientX - input.lookX, dy = t.clientY - input.lookY;
         input.lookX = t.clientX; input.lookY = t.clientY;
+        if (Math.abs(t.clientX - input.tapX) + Math.abs(t.clientY - input.tapY) > 14) {
+          input.tapMoved = true;
+          if (input.tapBreaking) { input.tapBreaking = false; input.breakHeld = false; }
+        }
         cam.yawT -= dx * 0.0034 * sens();
         cam.pitchT = clampPitch(cam.pitchT + dy * 0.0026 * sens());
       }
     }
     function lookEnd(e) {
-      for (var i = 0; i < e.changedTouches.length; i++)
-        if (e.changedTouches[i].identifier === input.lookId) input.lookId = null;
+      for (var i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier !== input.lookId) continue;
+        input.lookId = null;
+        // короткий тап без сдвига — поставить блок в прицел
+        var held = performance.now() - (input.tapT || 0);
+        if (S.creative && S.screen === 'game' && !S.paused && !input.tapMoved && !input.tapBreaking && held < 320) {
+          updateAim(); doPlace();
+        }
+        if (input.tapBreaking) { input.tapBreaking = false; input.breakHeld = false; }
+      }
     }
     cv.addEventListener('touchstart', function (e) { e.preventDefault(); global.SFX.resume(); lookStart(e); }, { passive: false });
     cv.addEventListener('touchmove', function (e) { e.preventDefault(); lookMove(e); }, { passive: false });
@@ -991,6 +1027,8 @@
     hold($('btnPlace'), function () { input.placeHeld = true; S.actCd = 0; }, function () { input.placeHeld = false; });
     hold($('btnDown'), function () { input.downHeld = true; }, function () { input.downHeld = false; });
     $('btnFly').onclick = function () { toggleFly(); };
+    $('btnSun').onclick = function () { cycleTime(); };
+    $('pNewWorld').onclick = function () { newWorld(); };
 
   }
 
@@ -1098,6 +1136,7 @@
     document.body.classList.remove('flying');
     if (S.player) S.player.fly = false;
     if (S.creative) {
+      S.timeIdx = 1;
       S.edits = S.edits || loadBuild();
       buildHotbar();
       // строить удобно только от первого лица: там прицел смотрит туда же, куда камера
@@ -1358,6 +1397,34 @@
     toast('СОРВАЛСЯ!');
   }
 
+  function cycleTime() {
+    if (!S.creative) return;
+    S.timeIdx = ((S.timeIdx === undefined ? 1 : S.timeIdx) + 1) % TIMES.length;
+    var D = DIFF[S.levelDiff];
+    S.eng.setTimeOfDay(TIMES[S.timeIdx][0], D.azim, D.cloud);
+    if (S.level && S.level.motes) S.level.motes.uniforms.uNight.value = S.eng.isNight ? 1 : 0;
+    toast(TIMES[S.timeIdx][1]);
+  }
+
+  // новый мир: стираем постройку и собираем остров заново
+  function newWorld() {
+    if (!S.creative) return;
+    var btn = $('pNewWorld');
+    if (!S.confirmNew) {
+      S.confirmNew = true;
+      btn.textContent = 'Точно стереть? Нажми ещё раз';
+      setTimeout(function () { S.confirmNew = false; btn.textContent = 'Новый мир'; }, 3000);
+      return;
+    }
+    S.confirmNew = false;
+    btn.textContent = 'Новый мир';
+    S.edits = {};
+    try { localStorage.removeItem('baldy3d_build'); } catch (e) { }
+    buildLevel(CFG.difficulty);
+    startGame();
+    toast('НОВЫЙ МИР');
+  }
+
   function toggleFly() {
     var p = S.player;
     if (!p || !S.creative) return;
@@ -1572,6 +1639,11 @@
 
   // прицел, постройка и автосохранение каждый кадр
   function updateCreative(dt) {
+    // палец держат на месте дольше 0.4 с — ломаем, пока не отпустят
+    if (input.lookId !== null && !input.tapMoved && !input.tapBreaking &&
+        performance.now() - (input.tapT || 0) > 400) {
+      input.tapBreaking = true; input.breakHeld = true; S.actCd = 0;
+    }
     updateAim();
     S.actCd = (S.actCd || 0) - dt;
     if (S.actCd <= 0) {
@@ -1742,6 +1814,19 @@
     var px = S.player ? S.player.x : eng.camera.position.x;
     var pz = S.player ? S.player.z : eng.camera.position.z;
     var night = eng.isNight ? 1 : 0.25;
+    if (S.creative) {
+      // лампы игрока: ближайшие к нему, до лимита источников
+      var lamps = (S.lamps || []).slice().sort(function (a, b) {
+        return ((a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)) - ((b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz));
+      });
+      var li = eng.isNight ? 1.6 : 0.7;
+      for (var k = 0; k < lamps.length && n < global.GFX.MAX_POINTS; k++) {
+        pos[n].set(lamps[k].x, lamps[k].y, lamps[k].z, 9.0);
+        col[n].set(1.0, 0.74, 0.40, li); n++;
+      }
+      eng.common.uPointCount.value = n;
+      return;
+    }
     // портал светится всегда
     pos[n].set(L.exit.x, global.WORLD.BASE + 2.2, L.exit.z, 8.5);
     col[n].set(0.35, 1.5, 0.95, 1.2); n++;
@@ -1875,9 +1960,9 @@
       updateHUD(dt);
       // победа
       var dxe = S.player.x - S.level.exit.x, dze = S.player.z - S.level.exit.z;
-      if (S.creative) return;
+      // в творческом выхода нет; return здесь нельзя — он пропустил бы отрисовку кадра
       var dye = S.player.y - (S.level.exit.y || S.player.y);
-      if (dxe * dxe + dze * dze < 1.9 && Math.abs(dye) < 2.8 && !S.noWin) endGame(true);
+      if (!S.creative && dxe * dxe + dze * dze < 1.9 && Math.abs(dye) < 2.8 && !S.noWin) endGame(true);
     } else if (S.screen === 'menu') {
       updateMenuCamera(dt);
     } else if (S.screen === 'end' || S.paused) {
@@ -1904,6 +1989,7 @@
       }
     }
     eng.render(dt);
+    S.frames = (S.frames || 0) + 1;     // для проверки, что кадры реально рисуются
   }
 
   window.addEventListener('load', boot);
@@ -1928,6 +2014,7 @@
   S._dev = { buildLevel: buildLevel, startGame: startGame, endGame: endGame, DIFF: DIFF, CFG: CFG,
              boxBlocked: boxBlocked, voxelSolid: voxelSolid, updateAim: updateAim, doBreak: doBreak, doPlace: doPlace, toggleFly: toggleFly,
              selectSlot: selectSlot, raycastVoxel: raycastVoxel, saveBuild: saveBuild, PALETTE: PALETTE,
+             rebuildChunk: rebuildChunk, collectLamps: collectLamps, cycleTime: cycleTime, newWorld: newWorld,
              cam: cam, input: input, toMenu: toMenu, pause: pause, simulate: simulate,
              bfsPath: bfsPath, cellOf: cellOf, isWallCell: isWallCell };
   global.GAME = S;

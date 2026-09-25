@@ -15,6 +15,8 @@
   var B = {};
   function defBlock(name, top, side, bottom, opts) {
     B[name] = Object.assign({ id: Object.keys(B).length + 1, top: top, side: side, bottom: bottom, solid: true }, opts || {});
+    // «сквозной» блок: через него видно соседей (листва, стекло)
+    B[name].see = !!(B[name].foliage || B[name].cutout);
     return B[name];
   }
 
@@ -34,6 +36,14 @@
     defBlock('BRICK', TILES.BRICK, TILES.BRICK, TILES.BRICK);
     defBlock('ROOF', TILES.ROOF, TILES.ROOF, TILES.ROOF);
     defBlock('MUD', TILES.MUD, TILES.MUD, TILES.MUD);
+    defBlock('GLASS', TILES.GLASS, TILES.GLASS, TILES.GLASS, { cutout: true });
+    defBlock('LAMP', TILES.LAMP, TILES.LAMP, TILES.LAMP, { light: true });
+    defBlock('WOOL_WHITE', TILES.WOOL_WHITE, TILES.WOOL_WHITE, TILES.WOOL_WHITE);
+    defBlock('WOOL_RED', TILES.WOOL_RED, TILES.WOOL_RED, TILES.WOOL_RED);
+    defBlock('WOOL_BLUE', TILES.WOOL_BLUE, TILES.WOOL_BLUE, TILES.WOOL_BLUE);
+    defBlock('WOOL_YELLOW', TILES.WOOL_YELLOW, TILES.WOOL_YELLOW, TILES.WOOL_YELLOW);
+    defBlock('WOOL_GREEN', TILES.WOOL_GREEN, TILES.WOOL_GREEN, TILES.WOOL_GREEN);
+    defBlock('WOOL_BLACK', TILES.WOOL_BLACK, TILES.WOOL_BLACK, TILES.WOOL_BLACK);
     return B;
   }
 
@@ -164,6 +174,7 @@
           if (vol.get(x, BASE + 1, z) !== 0) continue;
         }
         if (top !== grassId) continue;
+        if (vol.get(x, y + 1, z) !== 0) continue;   // на траву поставили блок — пучок не торчит сквозь него
         var n = N.fbm(x * 0.11, z * 0.11, 4096, 77, 3);
         var chance = density * (0.35 + n * 1.5);
         if (rnd() > chance) continue;
@@ -234,7 +245,7 @@
       if (v === 0) return 0;
       if (v === 255) return 1;
       var d = defsById[v];
-      return (d && d.foliage) ? 0 : 1;
+      return (d && d.see) ? 0 : 1;
     }
 
     for (var y = 0; y < sy; y++) {
@@ -244,20 +255,20 @@
           if (v === 0) continue;
           var def = defsById[v];
           if (!def) continue;
-          var M = def.foliage ? folM : solidM;
+          var M = def.see ? folM : solidM;
           for (var fi = 0; fi < 6; fi++) {
             var d = FACES[fi].dir;
             var nx = x + d[0], ny = y + d[1], nz = z + d[2];
             var nv = vol.get(nx, ny, nz);
             if (nv !== 0) {
               var nd = defsById[nv];
-              var neighborSolid = (nv === 255) || (nd && !nd.foliage);
+              var neighborSolid = (nv === 255) || (nd && !nd.see);
               if (neighborSolid) continue;
-              if (nd && def.foliage && nd.foliage) continue; // листва к листве — не рисуем
+              if (nd && def.see && nd.id === def.id) continue;   // листва к листве, стекло к стеклу
             }
             var tile = fi === 2 ? def.top : (fi === 3 ? def.bottom : def.side);
             var aoVals = [1, 1, 1, 1];
-            if (!def.foliage) {
+            if (!def.see) {
               for (var ci = 0; ci < 4; ci++) {
                 var nb = AO_CACHE[fi][ci];
                 var s1 = occl(x + nb[0][0], y + nb[0][1], z + nb[0][2]);

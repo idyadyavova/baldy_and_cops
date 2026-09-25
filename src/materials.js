@@ -79,7 +79,8 @@
       'flat in float vTile;',
       'out vec4 outColor;',
       'uniform sampler2DArray uAlbedo, uNormalMap, uMatMap;',
-      'uniform float uParaScale[24];',
+      'uniform float uParaScale[32];',
+      'uniform float uEmit[32];',
       'uniform float uPOM, uDetailAmt, uDebug;',
       global.GFX.LIB,
       TBN_FN,
@@ -136,6 +137,7 @@
         '  float trans = pow(clamp(dot(-V, uSunDir), 0.0, 1.0), 3.0);',
         '  col += albedo * uSunColor * trans * 0.55 * shadowAt(vWorld, Nw, 1.0);'
       ].join('\n') : '',
+      '  col += albedo * uEmit[int(layer)] * 6.0;',     // светящиеся блоки (лампа)
       '  col = applyFog(col, vWorld);',
       '  outColor = vec4(col, 1.0);',
       '}'
@@ -143,13 +145,16 @@
   }
 
   function blockUniforms(THREE, common, tex) {
-    var para = new Float32Array(24);
-    for (var i = 0; i < tex.paraScales.length && i < 24; i++) para[i] = tex.paraScales[i];
+    var para = new Float32Array(32);
+    for (var i = 0; i < tex.paraScales.length && i < 32; i++) para[i] = tex.paraScales[i];
+    var emit = new Float32Array(32);
+    if (tex.TILES && tex.TILES.LAMP !== undefined) emit[tex.TILES.LAMP] = 1.0;
     var u = Object.assign({}, common);
     u.uAlbedo = { value: tex.albedo };
     u.uNormalMap = { value: tex.normal };
     u.uMatMap = { value: tex.matmap };
     u.uParaScale = { value: para };
+    u.uEmit = { value: emit };
     u.uPOM = { value: 1.0 };
     u.uDetailAmt = { value: 1.0 };
     u.uDebug = { value: 0.0 };

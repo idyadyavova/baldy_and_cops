@@ -13,9 +13,11 @@
   var TILES = {
     GRASS_TOP: 0, GRASS_SIDE: 1, DIRT: 2, ROCK: 3, COBBLE: 4, SAND: 5,
     PLANKS: 6, BARK: 7, LOG_TOP: 8, LEAVES: 9, BRICK: 10, GRAVEL: 11,
-    ROOF: 12, HEDGE: 13, FLAGSTONE: 14, MUD: 15, TALL_GRASS: 16, BUSH: 17, VINE: 18
+    ROOF: 12, HEDGE: 13, FLAGSTONE: 14, MUD: 15, TALL_GRASS: 16, BUSH: 17, VINE: 18,
+    GLASS: 19, LAMP: 20,
+    WOOL_WHITE: 21, WOOL_RED: 22, WOOL_BLUE: 23, WOOL_YELLOW: 24, WOOL_GREEN: 25, WOOL_BLACK: 26
   };
-  var TILE_COUNT = 19;
+  var TILE_COUNT = 27;
 
   // ---------------------------------------------------------------
   //  Холст одного тайла
@@ -622,6 +624,65 @@
     T.bump = 1.6; T.aoStrength = 1.6;
   }
 
+  // Стекло: рамка по краю, пара бликов, середина прозрачная (alpha-test)
+  function genGlass(T, seed) {
+    var S = T.S, rnd = N.mulberry32(seed);
+    var fw = Math.max(2, Math.round(S * 0.045));
+    for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) {
+      var edge = Math.min(x, y, S - 1 - x, S - 1 - y);
+      var i = y * S + x;
+      if (edge < fw) {
+        var sh = edge < fw * 0.5 ? 0.92 : 0.72;
+        T.set(x, y, 0.70 * sh, 0.80 * sh, 0.86 * sh, 0.9, 0.12, 1);
+      } else {
+        T.set(x, y, 0.8, 0.88, 0.92, 0.5, 0.05, 0);
+      }
+    }
+    // диагональные блики — как в майне
+    function streak(x0, y0, len) {
+      for (var k = 0; k < len; k++) {
+        for (var w = 0; w < Math.max(1, S / 64); w++) {
+          T.set(Math.round(x0 + k + w), Math.round(y0 - k), 0.95, 0.98, 1.0, 0.7, 0.05, 1);
+        }
+      }
+    }
+    streak(S * 0.22, S * 0.42, S * 0.16);
+    streak(S * 0.30, S * 0.36, S * 0.07);
+    streak(S * 0.60, S * 0.80, S * 0.12);
+    T.bump = 0.6; T.aoStrength = 0.5;
+  }
+
+  // Лампа: тёплые кристаллы в тёмной оправе, светится сама
+  function genLamp(T, seed) {
+    var S = T.S;
+    for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) {
+      var u = x / S, v = y / S;
+      var w = N.worley(u * 5, v * 5, 5, seed, 1.0);
+      var d = w[1] - w[0];
+      var crack = 1 - N.smoothstep(0.0, 0.07, d);
+      var glow = 0.75 + 0.35 * w[2] + 0.2 * (N.fbm(u * 30, v * 30, 30, seed + 3, 3) - 0.5);
+      var r = 1.00 * glow, g = 0.78 * glow, b = 0.38 * glow;
+      if (crack > 0) { r = lerp(r, 0.30, crack); g = lerp(g, 0.18, crack); b = lerp(b, 0.08, crack); }
+      T.set(x, y, clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1), 0.7 - crack * 0.4, 0.35 + crack * 0.4);
+    }
+    T.bump = 1.3; T.aoStrength = 1.2;
+  }
+
+  // Шерсть: мягкая волокнистая фактура, цвет задаётся снаружи
+  function makeWool(rgb) {
+    return function (T, seed) {
+      var S = T.S;
+      for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) {
+        var u = x / S, v = y / S;
+        var fib = N.fbm(u * 18, v * 60, 18, seed, 4) * 0.55 + N.fbm(u * 60, v * 18, 60, seed + 7, 4) * 0.45;
+        var knot = N.vnoise(u * 120, v * 120, 120, seed + 3);
+        var sh = 0.82 + 0.28 * fib + 0.08 * (knot - 0.5);
+        T.set(x, y, rgb[0] * sh, rgb[1] * sh, rgb[2] * sh, 0.45 + 0.4 * fib, 0.96);
+      }
+      T.bump = 1.1; T.aoStrength = 1.8;
+    };
+  }
+
   // Куст: плотная округлая масса листвы на прозрачном фоне
   function genBush(T, seed) {
     genLeaves(T, seed + 17, true);
@@ -698,7 +759,11 @@
     ['PLANKS', genPlanks], ['BARK', genBark], ['LOG_TOP', genLogTop],
     ['LEAVES', function (T, s) { genLeaves(T, s, false); }], ['BRICK', genBrick], ['GRAVEL', genGravel],
     ['ROOF', genRoof], ['HEDGE', genHedge], ['FLAGSTONE', genFlagstone], ['MUD', genMud],
-    ['TALL_GRASS', genTallGrass], ['BUSH', genBush], ['VINE', genVine]
+    ['TALL_GRASS', genTallGrass], ['BUSH', genBush], ['VINE', genVine],
+    ['GLASS', genGlass], ['LAMP', genLamp],
+    ['WOOL_WHITE', makeWool([0.80, 0.80, 0.78])], ['WOOL_RED', makeWool([0.55, 0.07, 0.06])],
+    ['WOOL_BLUE', makeWool([0.08, 0.16, 0.55])], ['WOOL_YELLOW', makeWool([0.85, 0.66, 0.08])],
+    ['WOOL_GREEN', makeWool([0.14, 0.40, 0.08])], ['WOOL_BLACK', makeWool([0.11, 0.11, 0.13])]
   ];
 
   // Пошаговый сборщик — чтобы показывать прогресс загрузки без фризов

@@ -101,7 +101,10 @@
   #btnHit.cool{opacity:.35}
   body.desktop #btnHit{display:none}
   /* творческий режим */
-  #btnBreak,#btnPlace,#btnDown,#btnFly{display:none}
+  #btnBreak,#btnPlace,#btnDown,#btnFly,#btnSun,#pNewWorld{display:none}
+  body.creative #btnSun{display:flex}
+  body.creative #pNewWorld{display:flex}
+  #btnSun{font-size:18px}
   body.creative #btnBreak,body.creative #btnPlace{display:flex}
   body.creative #btnFly{display:flex}
   body.creative.flying #btnDown{display:flex}
@@ -186,7 +189,7 @@
       <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
       <button class="btn" id="btnHelp">Как играть</button>
     </div>
-    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925f</div>
+    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925g</div>
     <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
   </div>
 </div>
@@ -244,10 +247,11 @@
       WASD — идти, Shift — бег, Пробел — прыжок, Esc — пауза и снять захват.<br>
       F5 или V — вид по кругу: от первого лица, от третьего, спереди.<br>
       На паркуре срыв не проигрыш: вернёт на последнюю платформу.<br>
-      В творческом: ментов нет, кнопка ✈ включает полёт (или двойной прыжок),
-      «ЛОМАТЬ» и «СТАВИТЬ» работают по прицелу, блок выбирается в панели сверху.
-      На компьютере: ЛКМ — сломать, ПКМ — поставить, 1–9 — выбор блока, F — полёт.
-      Постройка сохраняется в браузере.<br>
+      В творческом: ментов нет, кнопка ✈ включает полёт (или двойной прыжок), ☀ меняет время суток.
+      Тап по экрану — поставить блок в прицел, долгое удержание — ломать; то же делают кнопки
+      «СТАВИТЬ» и «ЛОМАТЬ». Блок выбирается в панели сверху. Лампы светятся и освещают ночь.
+      На компьютере: ЛКМ — сломать, ПКМ — поставить, 1–9 или колесо — выбор блока, F — полёт, T — время.
+      Постройка сохраняется в браузере, стереть её можно в паузе кнопкой «Новый мир».<br>
       Удар — левая кнопка мыши или F. Оглушённый мент падает и пропускает.</div>
     <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
   </div>
@@ -260,6 +264,7 @@
       <div class="iconBtn" id="btnPause">II</div>
       <div class="iconBtn" id="btnView" title="Сменить вид">3‑е</div>
       <div class="iconBtn" id="btnFly" title="Полёт">✈</div>
+      <div class="iconBtn" id="btnSun" title="Время суток">☀</div>
       <div class="chip" id="hudTimeChip"><small>⏱</small><span id="hudTime">00:00</span></div>
       <div class="chip" id="hudCoinChip"><small>◉</small><span id="hudCoins">0/0</span></div>
       <div id="hotbar"></div>
@@ -295,6 +300,7 @@
       <button class="btn" id="pMenu">В меню</button>
     </div>
     <div class="row" style="margin-top:9px"><button class="btn" id="pGfx">Графика</button></div>
+    <div class="row" style="margin-top:9px"><button class="btn" id="pNewWorld" style="justify-content:center;color:#ffb4a3">Новый мир</button></div>
   </div>
 </div>
 
@@ -311,25 +317,25 @@
   </div>
 </div>
 
-<script src="lib/three.min.js?v=20260925f"></script>
+<script src="lib/three.min.js?v=20260925g"></script>
 <script>
   // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
   if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
 </script>
-<script src="src/noise.js?v=20260925f"></script>
-<script src="src/textures.js?v=20260925f"></script>
-<script src="src/shaderlib.js?v=20260925f"></script>
-<script src="src/sky.js?v=20260925f"></script>
-<script src="src/materials.js?v=20260925f"></script>
-<script src="src/world.js?v=20260925f"></script>
-<script src="src/water.js?v=20260925f"></script>
-<script src="src/character.js?v=20260925f"></script>
-<script src="src/props.js?v=20260925f"></script>
-<script src="src/particles.js?v=20260925f"></script>
-<script src="src/post.js?v=20260925f"></script>
-<script src="src/engine.js?v=20260925f"></script>
-<script src="src/maps.js?v=20260925f"></script>
-<script src="src/audio.js?v=20260925f"></script>
-<script src="src/game.js?v=20260925f"></script>
+<script src="src/noise.js?v=20260925g"></script>
+<script src="src/textures.js?v=20260925g"></script>
+<script src="src/shaderlib.js?v=20260925g"></script>
+<script src="src/sky.js?v=20260925g"></script>
+<script src="src/materials.js?v=20260925g"></script>
+<script src="src/world.js?v=20260925g"></script>
+<script src="src/water.js?v=20260925g"></script>
+<script src="src/character.js?v=20260925g"></script>
+<script src="src/props.js?v=20260925g"></script>
+<script src="src/particles.js?v=20260925g"></script>
+<script src="src/post.js?v=20260925g"></script>
+<script src="src/engine.js?v=20260925g"></script>
+<script src="src/maps.js?v=20260925g"></script>
+<script src="src/audio.js?v=20260925g"></script>
+<script src="src/game.js?v=20260925g"></script>
 </body>
 </html>
