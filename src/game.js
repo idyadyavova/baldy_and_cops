@@ -39,9 +39,18 @@
     1: { map: '1', name: 'Простой', cops: 2, copSpeed: 2.10, vision: 10, repath: 1.5, stun: 7.0, coins: 8, sun: 0.32, azim: 0.85, cloud: 0.56 },
     2: { map: '2', name: 'Средний', cops: 3, copSpeed: 2.50, vision: 12, repath: 1.1, stun: 6.0, coins: 12, sun: 0.085, azim: 2.35, cloud: 0.47 },
     3: { map: '3', name: 'Сложный', cops: 5, copSpeed: 2.72, vision: 14, repath: 0.8, stun: 5.0, coins: 16, sun: -0.40, azim: 1.6, cloud: 0.64 },
-    4: { parkour: true, name: 'Паркур', cops: 3, copSpeed: 2.35, vision: 13, repath: 1.2, stun: 6.0, coins: 14, sun: 0.52, azim: 1.15, cloud: 0.58 }
+    4: { parkour: true, name: 'Паркур', cops: 3, copSpeed: 2.35, vision: 13, repath: 1.2, stun: 6.0, coins: 14, sun: 0.52, azim: 1.15, cloud: 0.58 },
+    5: { creative: true, name: 'Творческий', cops: 0, copSpeed: 0, vision: 0, repath: 2, stun: 5, coins: 0, sun: 0.62, azim: 0.9, cloud: 0.62 }
   };
-  var DIFF_COUNT = 4;
+  var DIFF_COUNT = 5;
+
+  // блоки, доступные в творческом режиме
+  var PALETTE = [
+    ['GRASS', 'Трава'], ['DIRT', 'Земля'], ['ROCK', 'Камень'], ['COBBLE', 'Булыжник'],
+    ['FLAG', 'Плитняк'], ['BRICK', 'Кирпич'], ['PLANKS', 'Доски'], ['LOG', 'Бревно'],
+    ['LEAVES', 'Листва'], ['HEDGE', 'Кусты'], ['SAND', 'Песок'], ['GRAVEL', 'Гравий'],
+    ['ROOF', 'Черепица'], ['MUD', 'Грязь']
+  ];
 
   // ------------------------------------------------------------------
   //  Состояние
@@ -97,6 +106,7 @@
   }
   var input = {
     mx: 0, my: 0, run: false, jump: false, hit: false,
+    breakBlock: false, placeBlock: false, down: false,
     stickId: null, stickX: 0, stickY: 0, stickCX: 0, stickCY: 0,
     lookId: null, lookX: 0, lookY: 0, keys: {}
   };
@@ -222,15 +232,21 @@
     if (S.level) {
       S.level.objects.forEach(function (o) { eng.scene.remove(o); disposeObject(o); });
     }
+    clearChunks();
     S.lanternLights.length = 0;
 
     var D = DIFF[diff];
     var B = global.WORLD.init(global.TEX.TILES);
-    var world = D.parkour
-      ? global.WORLD.generateParkour(THREE, 5100 + diff)
-      : global.WORLD.generate(THREE, global.MAPS[D.map], 1000 + diff * 77, { wallHeight: 2 });
-    var mesh = global.WORLD.buildMesh(THREE, world.vol, B, true);
-    global.WORLD.addGrassTufts(mesh.foliage, world, global.TEX.TILES, eng.Q.grass);
+    var world = D.creative
+      ? global.WORLD.generateCreative(THREE, 7700)
+      : (D.parkour
+        ? global.WORLD.generateParkour(THREE, 5100 + diff)
+        : global.WORLD.generate(THREE, global.MAPS[D.map], 1000 + diff * 77, { wallHeight: 2 }));
+    if (D.creative) { S.edits = loadBuild(); applyEdits(world); }
+    var mesh = D.creative
+      ? { solid: new global.WORLD.Mesher(), foliage: new global.WORLD.Mesher() }
+      : global.WORLD.buildMesh(THREE, world.vol, B, true);
+    if (!D.creative) global.WORLD.addGrassTufts(mesh.foliage, world, global.TEX.TILES, eng.Q.grass);
     if (!world.parkour) global.WORLD.addWallVines(mesh.foliage, world, global.TEX.TILES, Math.min(0.5, eng.Q.grass * 0.42));
 
     if (!S.blockMat) {
@@ -245,6 +261,11 @@
     S.blockMat.uniforms.uDetailAmt.value = eng.Q.detail;
 
     var objects = [];
+    if (D.creative) {
+      // мир из чанков: правка блока пересобирает только свой кусок
+      S.level = { world: world, objects: objects };
+      buildChunks(world);
+    }
     var solid = new THREE.Mesh(mesh.solid.geometry(THREE), S.blockMat);
     solid.userData.depthMat = S.depthBlock;
     solid.frustumCulled = false;
@@ -271,6 +292,7 @@
     var exitY = world.exitPos ? world.exitPos.y : BASE + 1;
     var exitObj = global.PROPS.makeExit(THREE, eng.common, S.depthMatObj);
     exitObj.group.position.set(ex.x, exitY, ex.z);
+    exitObj.group.visible = !D.creative;
     // разворачиваем портал к открытой стороне
     var openDir = 0;
     var dirs = [[0, -1, 0], [1, 0, Math.PI / 2], [0, 1, Math.PI], [-1, 0, -Math.PI / 2]];
@@ -299,7 +321,9 @@
       if (cc2[0] === exitCell[0] && cc2[1] === exitCell[1]) continue;
       coinCells.push(cc2);
     }
-    if (world.parkour) {
+    if (D.creative) {
+      S.coins = [];
+    } else if (world.parkour) {
       S.coins = [];
       for (var pi = 1; pi < world.platforms.length - 1 && S.coins.length < D.coins; pi += 2) {
         var pl2 = world.platforms[pi];
@@ -420,6 +444,224 @@
     }
   }
 
+  // ==================================================================
+  //  ТВОРЧЕСКИЙ РЕЖИМ: чанки, прицел, постройка, полёт
+  // ==================================================================
+  var CHUNK = 16;
+
+  function clearChunks() {
+    var C = S.chunks; if (!C) return;
+    for (var k = 0; k < C.list.length; k++) {
+      var ch = C.list[k];
+      ['solid', 'foliage'].forEach(function (key) {
+        if (ch[key]) { S.eng.scene.remove(ch[key]); ch[key].geometry.dispose(); ch[key] = null; }
+      });
+    }
+    S.chunks = null;
+  }
+
+  function rebuildChunk(i, j) {
+    var C = S.chunks, eng = S.eng, L = S.level;
+    if (!C || i < 0 || j < 0 || i >= C.nx || j >= C.nz) return;
+    var ch = C.list[j * C.nx + i];
+    var b = {
+      x0: i * CHUNK, x1: Math.min(L.world.sx, (i + 1) * CHUNK),
+      z0: j * CHUNK, z1: Math.min(L.world.sz, (j + 1) * CHUNK)
+    };
+    var m = global.WORLD.buildMesh(THREE, L.world.vol, global.WORLD.blocks(), true, b);
+    global.WORLD.addGrassTufts(m.foliage, L.world, global.TEX.TILES, eng.Q.grass, b);
+    ['solid', 'foliage'].forEach(function (key) {
+      if (ch[key]) { eng.scene.remove(ch[key]); ch[key].geometry.dispose(); ch[key] = null; }
+    });
+    if (m.solid.count) {
+      var ms = new THREE.Mesh(m.solid.geometry(THREE), S.blockMat);
+      ms.userData.depthMat = S.depthBlock;
+      eng.scene.add(ms); ch.solid = ms;
+    }
+    if (m.foliage.count) {
+      var mf = new THREE.Mesh(m.foliage.geometry(THREE), S.folMat);
+      mf.userData.depthMat = S.depthFol;
+      eng.scene.add(mf); ch.foliage = mf;
+    }
+  }
+
+  function buildChunks(world) {
+    clearChunks();
+    var nx = Math.ceil(world.sx / CHUNK), nz = Math.ceil(world.sz / CHUNK);
+    var list = [];
+    for (var j = 0; j < nz; j++) for (var i = 0; i < nx; i++) list.push({ i: i, j: j, solid: null, foliage: null });
+    S.chunks = { nx: nx, nz: nz, list: list };
+    for (var k = 0; k < list.length; k++) rebuildChunk(list[k].i, list[k].j);
+  }
+
+  // правка блока задевает соседний чанк, если стоит на его границе
+  function touchBlock(bx, bz) {
+    var i = Math.floor(bx / CHUNK), j = Math.floor(bz / CHUNK);
+    rebuildChunk(i, j);
+    if (bx - i * CHUNK === 0) rebuildChunk(i - 1, j);
+    if (bx - i * CHUNK === CHUNK - 1) rebuildChunk(i + 1, j);
+    if (bz - j * CHUNK === 0) rebuildChunk(i, j - 1);
+    if (bz - j * CHUNK === CHUNK - 1) rebuildChunk(i, j + 1);
+  }
+
+  // ---- луч по вокселям (алгоритм Amanatides–Woo) ----
+  var _rayDir = new THREE.Vector3();
+  function targetSolid(bx, by, bz) {
+    var w = S.level.world;
+    if (bx < 0 || bz < 0 || by < 0 || bx >= w.sx || bz >= w.sz || by >= w.sy) return false;
+    var v = w.vol.get(bx, by, bz);
+    return v !== 0 && v !== 255;      // 255 — невидимая подложка, её не трогаем
+  }
+
+  function raycastVoxel(maxDist) {
+    var cam3 = S.eng.camera;
+    cam3.getWorldDirection(_rayDir);
+    var ox = cam3.position.x, oy = cam3.position.y, oz = cam3.position.z;
+    var dx = _rayDir.x, dy = _rayDir.y, dz = _rayDir.z;
+    var x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
+    var INF = 1e9;
+    var sX = dx > 0 ? 1 : -1, sY = dy > 0 ? 1 : -1, sZ = dz > 0 ? 1 : -1;
+    var tdx = dx !== 0 ? Math.abs(1 / dx) : INF;
+    var tdy = dy !== 0 ? Math.abs(1 / dy) : INF;
+    var tdz = dz !== 0 ? Math.abs(1 / dz) : INF;
+    var tx = dx !== 0 ? (dx > 0 ? (x + 1 - ox) : (ox - x)) * tdx : INF;
+    var ty = dy !== 0 ? (dy > 0 ? (y + 1 - oy) : (oy - y)) * tdy : INF;
+    var tz = dz !== 0 ? (dz > 0 ? (z + 1 - oz) : (oz - z)) * tdz : INF;
+    var nx = 0, ny = 0, nz = 0;
+    for (var it = 0; it < 160; it++) {
+      if (targetSolid(x, y, z)) return { x: x, y: y, z: z, nx: nx, ny: ny, nz: nz };
+      if (tx <= ty && tx <= tz) {
+        if (tx > maxDist) break;
+        x += sX; tx += tdx; nx = -sX; ny = 0; nz = 0;
+      } else if (ty <= tz) {
+        if (ty > maxDist) break;
+        y += sY; ty += tdy; nx = 0; ny = -sY; nz = 0;
+      } else {
+        if (tz > maxDist) break;
+        z += sZ; tz += tdz; nx = 0; ny = 0; nz = -sZ;
+      }
+    }
+    return null;
+  }
+
+  function ensureAimBox() {
+    if (S.aimBox) return S.aimBox;
+    var g = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
+    var m = new THREE.LineBasicMaterial({ color: 0x0b0d12, transparent: true, opacity: 0.85 });
+    var box = new THREE.LineSegments(g, m);
+    box.visible = false;
+    box.renderOrder = 30;
+    S.eng.scene.add(box);
+    S.aimBox = box;
+    return box;
+  }
+
+  function updateAim() {
+    var box = ensureAimBox();
+    var hit = raycastVoxel(9);
+    S.aim = hit;
+    if (hit) {
+      box.visible = true;
+      box.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    } else box.visible = false;
+  }
+
+  // ---- правка мира ----
+  function editBlock(bx, by, bz, id) {
+    var w = S.level.world;
+    if (bx < 0 || bz < 0 || by < 0 || bx >= w.sx || bz >= w.sz || by >= w.sy) return false;
+    w.vol.set(bx, by, bz, id);
+    S.edits[bx + ',' + by + ',' + bz] = id;
+    touchBlock(bx, bz);
+    scheduleSave();
+    return true;
+  }
+
+  function doBreak() {
+    if (!S.aim) return;
+    var h = S.aim;
+    if (!targetSolid(h.x, h.y, h.z)) return;
+    editBlock(h.x, h.y, h.z, 0);
+    global.SFX.step(true);
+    cam.shake = 0.35;
+  }
+
+  function doPlace() {
+    if (!S.aim) return;
+    var h = S.aim;
+    var bx = h.x + h.nx, by = h.y + h.ny, bz = h.z + h.nz;
+    var w = S.level.world;
+    if (bx < 0 || bz < 0 || by < 0 || bx >= w.sx || bz >= w.sz || by >= w.sy) return;
+    if (w.vol.get(bx, by, bz) !== 0) return;
+    // не замуровываем игрока
+    var p = S.player, r = 0.27;
+    if (bx + 1 > p.x - r && bx < p.x + r && bz + 1 > p.z - r && bz < p.z + r &&
+        by + 1 > p.y + 0.02 && by < p.y + PH - 0.02) return;
+    editBlock(bx, by, bz, S.blockId);
+    global.SFX.land();
+  }
+
+  // ---- сохранение постройки ----
+  var saveTimer = 0;
+  function scheduleSave() { saveTimer = 1.2; }
+  function saveBuild() {
+    try { localStorage.setItem('baldy3d_build', JSON.stringify(S.edits)); } catch (e) { }
+  }
+  function loadBuild() {
+    try { return JSON.parse(localStorage.getItem('baldy3d_build') || '{}') || {}; } catch (e) { return {}; }
+  }
+  function applyEdits(world) {
+    var n = 0;
+    for (var k in S.edits) {
+      var p2 = k.split(',');
+      world.vol.set(+p2[0], +p2[1], +p2[2], S.edits[k]);
+      n++;
+    }
+    return n;
+  }
+
+  // ---- панель блоков ----
+  function buildHotbar() {
+    var bar = $('hotbar');
+    if (!bar || !bar.appendChild || bar.dataset.built === '1') return;
+    var B = global.WORLD.blocks();
+    bar.innerHTML = '';
+    PALETTE.forEach(function (it, idx) {
+      var def = B[it[0]];
+      if (!def) return;
+      var d = document.createElement('div');
+      d.className = 'slot';
+      var th = S.tex && S.tex.thumbs ? S.tex.thumbs[def.top] : null;
+      if (th) d.style.backgroundImage = 'url(' + th + ')';
+      d.title = it[1];
+      d.onclick = function () { selectSlot(idx); };
+      bar.appendChild(d);
+    });
+    bar.dataset.built = '1';
+    selectSlot(S.slot || 0);
+  }
+
+  function selectSlot(i) {
+    var B = global.WORLD.blocks();
+    if (i < 0) i = PALETTE.length - 1;
+    i = i % PALETTE.length;
+    S.slot = i;
+    var def = B[PALETTE[i][0]];
+    S.blockId = def ? def.id : 1;
+    var bar = $('hotbar');
+    if (bar && bar.children) {
+      Array.prototype.forEach.call(bar.children, function (c, ci) { c.classList.toggle('sel', ci === i); });
+      var sel = bar.children[i];
+      if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+    var nm = $('hudBlockName');
+    if (nm && nm.style) {
+      nm.textContent = PALETTE[i][1];
+      nm.style.opacity = 1;
+      S.blockNameT = 1.4;
+    }
+  }
+
   // ------------------------------------------------------------------
   //  Геометрия мира: столкновения и клетки
   // ------------------------------------------------------------------
@@ -531,7 +773,15 @@
       var k = e.code || '', key = e.key || '';
       if (k === 'Escape' || key === 'Escape') { if (S.screen === 'game') pause(!S.paused); }
       if (k === 'Space') { input.jump = true; e.preventDefault(); }
-      if (k === 'KeyF' || key === 'f' || key === 'F' || key === 'а' || key === 'А') input.hit = true;
+      if (k === 'KeyF' || key === 'f' || key === 'F' || key === 'а' || key === 'А') {
+        if (S.creative) toggleFly(); else input.hit = true;
+      }
+      if (S.creative && k.indexOf('Digit') === 0) {
+        var dn = parseInt(k.slice(5), 10);
+        if (dn >= 1 && dn <= 9) selectSlot(dn - 1);
+      }
+      if (S.creative && (k === 'KeyQ' || key === 'q' || key === 'й')) selectSlot((S.slot || 0) - 1);
+      if (S.creative && (k === 'KeyE' || key === 'e' || key === 'у')) selectSlot((S.slot || 0) + 1);
       // смена вида: F5 как в майне (перезагрузку браузера гасим) или V
       if (k === 'F5' || key === 'F5' || k === 'KeyV' || key === 'v' || key === 'V' ||
           key === 'м' || key === 'М') {
@@ -690,13 +940,23 @@
     cv.addEventListener('mousedown', function (e) {
       global.SFX.resume();
       if (S.screen === 'game' && !S.paused && !S.touch) {
-        if (isLocked()) { if (e.button === 0) input.hit = true; }
-        else lockPointer();
+        if (isLocked()) {
+          if (S.creative) {
+            if (e.button === 0) { input.breakHeld = true; S.actCd = 0; }
+            else if (e.button === 2) { input.placeHeld = true; S.actCd = 0; }
+          } else if (e.button === 0) input.hit = true;
+        } else lockPointer();
         return;
       }
       dragging = true; lx = e.clientX; ly = e.clientY;
     });
-    window.addEventListener('mouseup', function () { dragging = false; });
+    window.addEventListener('mouseup', function () {
+      dragging = false; input.breakHeld = false; input.placeHeld = false;
+    });
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    window.addEventListener('wheel', function (e) {
+      if (S.creative && S.screen === 'game') selectSlot((S.slot || 0) + (e.deltaY > 0 ? 1 : -1));
+    }, { passive: true });
     window.addEventListener('mousemove', function (e) {
       if (isLocked()) {
         var mx = e.movementX || 0, my = e.movementY || 0;
@@ -725,8 +985,12 @@
       el.addEventListener('mouseleave', function () { el.classList.remove('on'); if (off) off(); });
     }
     hold($('btnHit'), function () { input.hit = true; });
-    hold($('btnJump'), function () { input.jump = true; });
+    hold($('btnJump'), function () { input.jump = true; input.jumpHeld = true; }, function () { input.jumpHeld = false; });
     hold($('btnRun'), function () { input.run = true; }, function () { input.run = false; });
+    hold($('btnBreak'), function () { input.breakHeld = true; S.actCd = 0; }, function () { input.breakHeld = false; });
+    hold($('btnPlace'), function () { input.placeHeld = true; S.actCd = 0; }, function () { input.placeHeld = false; });
+    hold($('btnDown'), function () { input.downHeld = true; }, function () { input.downHeld = false; });
+    $('btnFly').onclick = function () { toggleFly(); };
 
   }
 
@@ -829,14 +1093,27 @@
       cam.yaw = best; cam.yawT = best;
       S.player.yaw = best;
     })();
+    S.creative = !!DIFF[CFG.difficulty].creative;
+    document.body.classList.toggle('creative', S.creative);
+    document.body.classList.remove('flying');
+    if (S.player) S.player.fly = false;
+    if (S.creative) {
+      S.edits = S.edits || loadBuild();
+      buildHotbar();
+      // строить удобно только от первого лица: там прицел смотрит туда же, куда камера
+      cam.view = 0;
+      document.body.classList.add('fpv');
+      var bv2 = $('btnView'); if (bv2) bv2.textContent = '1‑е';
+    }
     S.screen = 'game';
     show('hud');
     global.SFX.init(); global.SFX.resume(); global.SFX.ambient(true);
     lockPointer();
-    toast('НАЙДИ ВЫХОД!');
+    toast(S.creative ? 'СТРОЙ ЧТО ХОЧЕШЬ' : 'НАЙДИ ВЫХОД!');
   }
   function toMenu() {
     hideDeathFx();
+    document.body.classList.remove('creative', 'flying');
     S.screen = 'menu'; S.paused = false;
     unlockPointer();
     if (S.player) { S.player.char.root.visible = true; S.fpMode = false; }
@@ -940,7 +1217,7 @@
     var dirX = -iz * sy - ix * cy;
     var dirZ = -iz * cy + ix * sy;
 
-    var maxSpeed = run ? 5.6 : 3.35;
+    var maxSpeed = p.fly ? (run ? 13.0 : 7.0) : (run ? 5.6 : 3.35);
     var accel = p.onGround ? 24 : 9;
     var tx = dirX * maxSpeed, tz = dirZ * maxSpeed;
     p.vx = damp(p.vx, tx, accel, dt);
@@ -962,6 +1239,35 @@
       if (!boxBlocked(p.x, p.y + 0.55, nz, r, PH - 0.55) && p.onGround &&
           !boxBlocked(p.x, p.y + 0.62, nz, r, 0.2)) { p.z = nz; p.y += 0.55; }
       else p.vz = 0;
+    }
+
+    // двойное нажатие прыжка включает полёт — как в майне
+    if (input.jump && S.creative) {
+      var nowMs = performance.now();
+      if (nowMs - (p.lastJumpTap || 0) < 380) { toggleFly(); p.lastJumpTap = 0; }
+      else p.lastJumpTap = nowMs;
+    }
+
+    // ---- полёт ----
+    if (p.fly) {
+      var upKey = (input.jumpHeld || input.keys['Space']) ? 1 : 0;
+      var downKey = (input.downHeld || input.keys['ShiftLeft'] || input.keys['ShiftRight'] || input.keys['KeyC']) ? 1 : 0;
+      p.vy = damp(p.vy, (upKey - downKey) * (run ? 10 : 5.5), 10, dt);
+      var nyF = p.y + p.vy * dt;
+      if (!boxBlocked(p.x, nyF, p.z, r, PH)) p.y = nyF; else p.vy = 0;
+      p.onGround = false; p.coyote = 0; p.jumpBuf = 0;
+      input.jump = false;
+      p.speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
+      if (p.speed > 0.25) {
+        var wantF = Math.atan2(p.vx, p.vz);
+        var dF = ((wantF - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        p.yaw += dF * (1 - Math.exp(-14 * dt));
+      }
+      p.char.root.position.set(p.x, p.y, p.z);
+      p.char.root.rotation.set(0, p.yaw, 0);
+      global.CHAR.update(p.char, dt, { speed: p.speed * 0.3, airborne: true, punch: p.punch });
+      p.cell = cellOf(p.x, p.z);
+      return;
     }
 
     // ---- прыжок и гравитация по объёму ----
@@ -1050,6 +1356,15 @@
     cam.shake = 0.6;
     global.SFX.land();
     toast('СОРВАЛСЯ!');
+  }
+
+  function toggleFly() {
+    var p = S.player;
+    if (!p || !S.creative) return;
+    p.fly = !p.fly;
+    p.vy = 0;
+    document.body.classList.toggle('flying', p.fly);
+    toast(p.fly ? 'ПОЛЁТ ВКЛЮЧЁН' : 'ПОЛЁТ ВЫКЛЮЧЕН');
   }
 
   // кого достаём кулаком: сектор перед игроком
@@ -1252,6 +1567,21 @@
       S.catchFx = true;
       deathFx();
       setTimeout(function () { endGame(false); }, 620);
+    }
+  }
+
+  // прицел, постройка и автосохранение каждый кадр
+  function updateCreative(dt) {
+    updateAim();
+    S.actCd = (S.actCd || 0) - dt;
+    if (S.actCd <= 0) {
+      if (input.breakHeld) { doBreak(); S.actCd = 0.20; }
+      else if (input.placeHeld) { doPlace(); S.actCd = 0.20; }
+    }
+    if (saveTimer > 0) { saveTimer -= dt; if (saveTimer <= 0) saveBuild(); }
+    if (S.blockNameT > 0) {
+      S.blockNameT -= dt;
+      if (S.blockNameT <= 0) { var nm = $('hudBlockName'); if (nm && nm.style) nm.style.opacity = 0; }
     }
   }
 
@@ -1500,17 +1830,19 @@
   }
 
   function updateHUD(dt) {
-    $('hudTime').textContent = fmtTime(S.time);
-    $('hudCoins').textContent = S.coinsGot + '/' + S.coins.length;
-    $('stamina').firstElementChild.style.width = Math.round(S.player.stamina * 100) + '%';
-    $('btnHit').classList.toggle('cool', S.player.punchCd > 0.02);
-    $('alert').style.opacity = S.alertLevel * 0.85;
-    $('alertTxt').style.opacity = S.alertLevel > 0.4 ? 1 : 0;
+    if (!S.creative) {
+      $('hudTime').textContent = fmtTime(S.time);
+      $('hudCoins').textContent = S.coinsGot + '/' + S.coins.length;
+      $('stamina').firstElementChild.style.width = Math.round(S.player.stamina * 100) + '%';
+      $('btnHit').classList.toggle('cool', S.player.punchCd > 0.02);
+      $('alert').style.opacity = S.alertLevel * 0.85;
+      $('alertTxt').style.opacity = S.alertLevel > 0.4 ? 1 : 0;
+    }
     if (toastTimer > 0) {
       toastTimer -= dt;
       if (toastTimer <= 0) { $('toast').style.opacity = 0; $('toast').style.transform = 'translateY(10px)'; }
     }
-    drawMinimap();
+    if (!S.creative) drawMinimap();
   }
 
   // ------------------------------------------------------------------
@@ -1539,9 +1871,11 @@
       updateCops(dt);
       updateCoins(dt);
       updateCamera(dt);
+      if (S.creative) updateCreative(dt);
       updateHUD(dt);
       // победа
       var dxe = S.player.x - S.level.exit.x, dze = S.player.z - S.level.exit.z;
+      if (S.creative) return;
       var dye = S.player.y - (S.level.exit.y || S.player.y);
       if (dxe * dxe + dze * dze < 1.9 && Math.abs(dye) < 2.8 && !S.noWin) endGame(true);
     } else if (S.screen === 'menu') {
@@ -1584,12 +1918,16 @@
       updateCops(dt);
       updateCoins(dt);
       updateCamera(dt);
+      if (S.creative) continue;              // в творческом выхода нет
       var dxe = S.player.x - S.level.exit.x, dze = S.player.z - S.level.exit.z;
-      if (dxe * dxe + dze * dze < 1.6 && !S.noWin) endGame(true);
+      var dye2 = S.player.y - (S.level.exit.y || S.player.y);
+      if (dxe * dxe + dze * dze < 1.9 && Math.abs(dye2) < 2.8 && !S.noWin) endGame(true);
     }
     return { steps: i, screen: S.screen, time: S.time };
   }
   S._dev = { buildLevel: buildLevel, startGame: startGame, endGame: endGame, DIFF: DIFF, CFG: CFG,
+             boxBlocked: boxBlocked, voxelSolid: voxelSolid, updateAim: updateAim, doBreak: doBreak, doPlace: doPlace, toggleFly: toggleFly,
+             selectSlot: selectSlot, raycastVoxel: raycastVoxel, saveBuild: saveBuild, PALETTE: PALETTE,
              cam: cam, input: input, toMenu: toMenu, pause: pause, simulate: simulate,
              bfsPath: bfsPath, cellOf: cellOf, isWallCell: isWallCell };
   global.GAME = S;

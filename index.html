@@ -100,6 +100,36 @@
   #btnHit:active,#btnHit.on{background:rgba(255,90,60,.45);border-color:#ff6b4d}
   #btnHit.cool{opacity:.35}
   body.desktop #btnHit{display:none}
+  /* творческий режим */
+  #btnBreak,#btnPlace,#btnDown,#btnFly{display:none}
+  body.creative #btnBreak,body.creative #btnPlace{display:flex}
+  body.creative #btnFly{display:flex}
+  body.creative.flying #btnDown{display:flex}
+  body.creative #btnHit,body.creative #stamina,body.creative #minimap,
+  body.creative #hudTimeChip,body.creative #hudCoinChip,body.creative #alertTxt{display:none}
+  body.desktop #btnBreak,body.desktop #btnPlace,body.desktop #btnDown{display:none!important}
+  #btnBreak{right:calc(108px + var(--safe-r));bottom:calc(126px + var(--safe-b));width:68px;height:68px;font-size:12px;
+    color:#ffd7c9;border-color:rgba(255,140,110,.7);background:rgba(120,32,22,.55)}
+  #btnPlace{right:calc(22px + var(--safe-r));bottom:calc(200px + var(--safe-b));width:68px;height:68px;font-size:12px;
+    color:#ccf5d8;border-color:rgba(110,255,160,.65);background:rgba(20,80,45,.55)}
+  #btnDown{right:calc(112px + var(--safe-r));bottom:calc(34px + var(--safe-b));width:70px;height:70px;font-size:12px}
+  body.creative.flying #btnRun{display:none}
+  #btnFly{font-size:17px}
+  body.creative.flying #btnFly{background:rgba(255,201,77,.35);border-color:var(--gold);color:#fff}
+  /* панель блоков */
+  #hotbar{display:none;gap:5px;overflow-x:auto;overflow-y:hidden;padding:2px;pointer-events:auto;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:100%}
+  #hotbar::-webkit-scrollbar{display:none}
+  body.creative #hotbar{display:flex}
+  .slot{flex:0 0 auto;width:42px;height:42px;border-radius:11px;border:1.5px solid var(--line);
+    background-size:cover;background-position:center;background-color:#1a2030;cursor:pointer;position:relative;
+    box-shadow:0 3px 10px rgba(0,0,0,.45)}
+  .slot.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,201,77,.35),0 3px 10px rgba(0,0,0,.5)}
+  .slot b{position:absolute;left:0;right:0;bottom:-15px;font-size:8.5px;font-weight:700;text-align:center;
+    color:#dde3ee;text-shadow:0 1px 3px #000;letter-spacing:.2px}
+  #hudBlockName{display:none;position:absolute;left:0;right:0;top:calc(62px + var(--safe-t));text-align:center;
+    font-size:12px;color:#e9edf5;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .25s}
+  body.creative #hudBlockName{display:block}
   .actBtn:active,.actBtn.on{background:rgba(255,201,77,.35);border-color:var(--gold)}
   #stamina{position:absolute;right:calc(22px + var(--safe-r));bottom:calc(20px + var(--safe-b));width:78px;height:6px;
     border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
@@ -156,7 +186,7 @@
       <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
       <button class="btn" id="btnHelp">Как играть</button>
     </div>
-    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925e</div>
+    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925f</div>
     <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
   </div>
 </div>
@@ -206,6 +236,7 @@
     <div class="stat"><span>Золотые монеты</span><b>очки</b></div>
     <div class="stat"><span>Зелёный портал</span><b>выход</b></div>
     <div class="stat"><span>Сложность «Паркур»</span><b>трасса по платформам</b></div>
+    <div class="stat"><span>Режим «Творческий»</span><b>строй что хочешь</b></div>
     <div class="stat"><span>Кнопка «УДАР»</span><b>вырубить мента</b></div>
     <div class="stat"><span>Кнопка «3‑е» сверху</span><b>сменить вид</b></div>
     <div class="hint">Менты ищут тебя по лабиринту. Если увидят — побегут напрямую.<br>
@@ -213,6 +244,10 @@
       WASD — идти, Shift — бег, Пробел — прыжок, Esc — пауза и снять захват.<br>
       F5 или V — вид по кругу: от первого лица, от третьего, спереди.<br>
       На паркуре срыв не проигрыш: вернёт на последнюю платформу.<br>
+      В творческом: ментов нет, кнопка ✈ включает полёт (или двойной прыжок),
+      «ЛОМАТЬ» и «СТАВИТЬ» работают по прицелу, блок выбирается в панели сверху.
+      На компьютере: ЛКМ — сломать, ПКМ — поставить, 1–9 — выбор блока, F — полёт.
+      Постройка сохраняется в браузере.<br>
       Удар — левая кнопка мыши или F. Оглушённый мент падает и пропускает.</div>
     <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
   </div>
@@ -224,8 +259,10 @@
     <div style="display:flex;gap:8px;align-items:flex-start">
       <div class="iconBtn" id="btnPause">II</div>
       <div class="iconBtn" id="btnView" title="Сменить вид">3‑е</div>
-      <div class="chip"><small>⏱</small><span id="hudTime">00:00</span></div>
-      <div class="chip"><small>◉</small><span id="hudCoins">0/0</span></div>
+      <div class="iconBtn" id="btnFly" title="Полёт">✈</div>
+      <div class="chip" id="hudTimeChip"><small>⏱</small><span id="hudTime">00:00</span></div>
+      <div class="chip" id="hudCoinChip"><small>◉</small><span id="hudCoins">0/0</span></div>
+      <div id="hotbar"></div>
     </div>
     <canvas id="minimap" width="150" height="150" style="width:78px;height:78px;flex:none"></canvas>
   </div>
@@ -237,6 +274,10 @@
   <div id="alertTxt">ТЕБЯ ЗАМЕТИЛИ!</div>
   <div id="toast"></div>
   <div class="actBtn" id="btnHit">УДАР</div>
+  <div class="actBtn" id="btnBreak">ЛОМАТЬ</div>
+  <div class="actBtn" id="btnPlace">СТАВИТЬ</div>
+  <div class="actBtn" id="btnDown">ВНИЗ</div>
+  <div id="hudBlockName"></div>
   <div id="crosshair"></div>
   <div id="mouseHint">Клик — захват мыши · WASD — идти · Shift — бег · Пробел — прыжок · ЛКМ или F — удар · Esc — пауза</div>
   <div id="fps">0 fps</div>
@@ -270,25 +311,25 @@
   </div>
 </div>
 
-<script src="lib/three.min.js?v=20260925e"></script>
+<script src="lib/three.min.js?v=20260925f"></script>
 <script>
   // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
   if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
 </script>
-<script src="src/noise.js?v=20260925e"></script>
-<script src="src/textures.js?v=20260925e"></script>
-<script src="src/shaderlib.js?v=20260925e"></script>
-<script src="src/sky.js?v=20260925e"></script>
-<script src="src/materials.js?v=20260925e"></script>
-<script src="src/world.js?v=20260925e"></script>
-<script src="src/water.js?v=20260925e"></script>
-<script src="src/character.js?v=20260925e"></script>
-<script src="src/props.js?v=20260925e"></script>
-<script src="src/particles.js?v=20260925e"></script>
-<script src="src/post.js?v=20260925e"></script>
-<script src="src/engine.js?v=20260925e"></script>
-<script src="src/maps.js?v=20260925e"></script>
-<script src="src/audio.js?v=20260925e"></script>
-<script src="src/game.js?v=20260925e"></script>
+<script src="src/noise.js?v=20260925f"></script>
+<script src="src/textures.js?v=20260925f"></script>
+<script src="src/shaderlib.js?v=20260925f"></script>
+<script src="src/sky.js?v=20260925f"></script>
+<script src="src/materials.js?v=20260925f"></script>
+<script src="src/world.js?v=20260925f"></script>
+<script src="src/water.js?v=20260925f"></script>
+<script src="src/character.js?v=20260925f"></script>
+<script src="src/props.js?v=20260925f"></script>
+<script src="src/particles.js?v=20260925f"></script>
+<script src="src/post.js?v=20260925f"></script>
+<script src="src/engine.js?v=20260925f"></script>
+<script src="src/maps.js?v=20260925f"></script>
+<script src="src/audio.js?v=20260925f"></script>
+<script src="src/game.js?v=20260925f"></script>
 </body>
 </html>

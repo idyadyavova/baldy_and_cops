@@ -713,6 +713,28 @@
       matMips.push(new Uint8Array(sz * sz * layers * 4));
     }
     var paraScales = new Float32Array(layers);
+    var thumbs = new Array(layers);
+
+    // маленькая картинка блока для панели выбора в творческом режиме
+    function makeThumb(albF, size) {
+      var TS = 40;
+      var cv = document.createElement('canvas');
+      cv.width = TS; cv.height = TS;
+      var ctx = cv.getContext('2d');
+      var img = ctx.createImageData(TS, TS);
+      var step = size / TS;
+      for (var y = 0; y < TS; y++) for (var x = 0; x < TS; x++) {
+        var sxp = Math.min(size - 1, Math.floor(x * step));
+        var syp = Math.min(size - 1, Math.floor((TS - 1 - y) * step));
+        var si = (syp * size + sxp) * 4, di = (y * TS + x) * 4;
+        img.data[di] = Math.pow(clamp(albF[si], 0, 1), 1 / 2.2) * 255;
+        img.data[di + 1] = Math.pow(clamp(albF[si + 1], 0, 1), 1 / 2.2) * 255;
+        img.data[di + 2] = Math.pow(clamp(albF[si + 2], 0, 1), 1 / 2.2) * 255;
+        img.data[di + 3] = albF[si + 3] > 0.4 ? 255 : 40;
+      }
+      ctx.putImageData(img, 0, 0);
+      return cv.toDataURL('image/png');
+    }
 
     function genLayer(li) {
       var T = new Tile(S);
@@ -725,6 +747,7 @@
         nrmF[i * 4] = na.nx[i] * 0.5 + 0.5; nrmF[i * 4 + 1] = na.ny[i] * 0.5 + 0.5; nrmF[i * 4 + 2] = na.nz[i] * 0.5 + 0.5; nrmF[i * 4 + 3] = 1;
         matF[i * 4] = T.rg[i]; matF[i * 4 + 1] = T.h[i]; matF[i * 4 + 2] = na.ao[i]; matF[i * 4 + 3] = 1;
       }
+      try { thumbs[li] = makeThumb(albF, S); } catch (e) { thumbs[li] = null; }
       var a = albF, n = nrmF, mt = matF, sz2 = S;
       for (var mi = 0; mi < mipCount; mi++) {
         var base = sz2 * sz2 * li * 4;
@@ -761,7 +784,7 @@
           albedo: makeArrayTex(THREE, albMips),
           normal: makeArrayTex(THREE, nrmMips),
           matmap: makeArrayTex(THREE, matMips),
-          paraScales: paraScales, TILES: TILES, count: layers, size: S
+          paraScales: paraScales, TILES: TILES, count: layers, size: S, thumbs: thumbs
         };
       }
     };

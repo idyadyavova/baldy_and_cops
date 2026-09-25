@@ -144,12 +144,15 @@
   };
 
   // Кусты высокой травы крестами на травяных клетках
-  function addGrassTufts(M, world, TILES, density) {
-    var rnd = N.mulberry32(1337);
+  function addGrassTufts(M, world, TILES, density, bounds) {
     var sx = world.sx, sz = world.sz, vol = world.vol;
     var grassId = B.GRASS.id;
-    for (var z = 1; z < sz - 1; z++) {
-      for (var x = 1; x < sx - 1; x++) {
+    var z0 = bounds ? Math.max(1, bounds.z0) : 1, z1 = bounds ? Math.min(sz - 1, bounds.z1) : sz - 1;
+    var x0 = bounds ? Math.max(1, bounds.x0) : 1, x1 = bounds ? Math.min(sx - 1, bounds.x1) : sx - 1;
+    for (var z = z0; z < z1; z++) {
+      for (var x = x0; x < x1; x++) {
+        // пучки детерминированы по координате: чанк можно пересобрать в любой момент
+        var rnd = N.mulberry32(1337 + x * 73856093 + z * 19349663);
         var h = world.height[z * sx + x];
         var top = vol.get(x, h, z);
         // на плато лабиринта трава тоже растёт (пол коридоров)
@@ -218,9 +221,11 @@
     }
   }
 
-  function buildMesh(THREE, vol, blockDefs, wantFoliage) {
+  function buildMesh(THREE, vol, blockDefs, wantFoliage, bounds) {
     var solidM = new Mesher(), folM = new Mesher();
     var sx = vol.sx, sy = vol.sy, sz = vol.sz;
+    var bx0 = bounds ? bounds.x0 : 0, bx1 = bounds ? bounds.x1 : sx;
+    var bz0 = bounds ? bounds.z0 : 0, bz1 = bounds ? bounds.z1 : sz;
     var defsById = {};
     for (var k in blockDefs) defsById[blockDefs[k].id] = blockDefs[k];
 
@@ -233,8 +238,8 @@
     }
 
     for (var y = 0; y < sy; y++) {
-      for (var z = 0; z < sz; z++) {
-        for (var x = 0; x < sx; x++) {
+      for (var z = bz0; z < bz1; z++) {
+        for (var x = bx0; x < bx1; x++) {
           var v = vol.get(x, y, z);
           if (v === 0) continue;
           var def = defsById[v];
@@ -600,8 +605,98 @@
     };
   }
 
+  // ---------------------------------------------------------------
+  //  Творческий режим: большой открытый остров без разметки уровня
+  // ---------------------------------------------------------------
+  function generateCreative(THREE, seed) {
+    var sx = 128, sz = 128, sy = BASE + 40;
+    var vol = new Volume(sx, sy, sz);
+    var rnd = N.mulberry32(seed);
+    var cx = sx / 2, cz = sz / 2;
+
+    var height = new Float32Array(sx * sz);
+    var surfBlock = new Uint8Array(sx * sz);
+    for (var z = 0; z < sz; z++) {
+      for (var x = 0; x < sx; x++) {
+        var dx = x - cx, dz = z - cz;
+        var d = Math.sqrt(dx * dx + dz * dz) / (sx * 0.47);
+        // центр ровный — есть где строить, к краям холмы и пляж
+        var flat = 1 - N.smoothstep(0.18, 0.62, d);
+        var hills = (N.fbm(x * 0.028, z * 0.028, 4096, seed + 5, 4) - 0.5) * 9.0;
+        var fine = (N.fbm(x * 0.09, z * 0.09, 4096, seed + 11, 3) - 0.5) * 1.6;
+        var h = BASE + hills * (1 - flat) * (1 - N.clamp(d, 0, 1)) + fine * (1 - flat * 0.8)
+              - N.smoothstep(0.66, 1.05, d) * (BASE + 5);
+        var hi = Math.max(0, Math.round(h));
+        height[z * sx + x] = hi;
+        var blk;
+        if (hi <= WATER + 0.9) blk = B.SAND;
+        else if (hi <= WATER + 1.8) blk = (N.vnoise(x * 0.3, z * 0.3, 4096, seed + 3) > 0.45 ? B.SAND : B.GRASS);
+        else {
+          var rocky = N.fbm(x * 0.075, z * 0.075, 4096, seed + 21, 4);
+          blk = rocky > 0.70 ? B.ROCK : (rocky > 0.64 ? B.GRAVEL : B.GRASS);
+        }
+        surfBlock[z * sx + x] = blk.id;
+        var depth = Math.max(0, hi - 5);
+        for (var y = depth; y <= hi; y++) {
+          vol.set(x, y, z, y === hi ? blk.id : (y > hi - 3 ? (blk === B.SAND ? B.SAND.id : B.DIRT.id) : B.ROCK.id));
+        }
+        if (depth > 0) for (var y2 = 0; y2 < depth; y2++) vol.set(x, y2, z, 255);
+      }
+    }
+
+    // деревья по всему острову, но не в центральной стройплощадке
+    for (var ti = 0; ti < 150; ti++) {
+      var tx = 3 + Math.floor(rnd() * (sx - 6)), tz = 3 + Math.floor(rnd() * (sz - 6));
+      var ddc = Math.sqrt((tx - cx) * (tx - cx) + (tz - cz) * (tz - cz));
+      if (ddc < 16) continue;
+      var th = height[tz * sx + tx];
+      if (th <= WATER + 1.6 || surfBlock[tz * sx + tx] !== B.GRASS.id) continue;
+      var trunkH = 4 + Math.floor(rnd() * 4);
+      for (var ty = 1; ty <= trunkH; ty++) vol.set(tx, th + ty, tz, B.LOG.id);
+      var tp = th + trunkH, rad = 2 + (rnd() > 0.55 ? 1 : 0);
+      for (var ly = -2; ly <= 2; ly++) for (var lx = -rad; lx <= rad; lx++) for (var lz = -rad; lz <= rad; lz++) {
+        var dl = Math.sqrt(lx * lx + lz * lz + ly * ly * 1.6);
+        if (dl > rad + 0.6 || (dl > rad - 0.2 && rnd() > 0.45)) continue;
+        if (lx === 0 && lz === 0 && ly < 1) continue;
+        if (vol.get(tx + lx, tp + ly, tz + lz) === 0) vol.set(tx + lx, tp + ly, tz + lz, B.LEAVES.id);
+      }
+    }
+
+    // стартовая площадка в центре
+    var ch0 = height[Math.round(cz) * sx + Math.round(cx)];
+    for (var ax = -4; ax <= 4; ax++) for (var az = -4; az <= 4; az++) {
+      var px2 = Math.round(cx) + ax, pz2 = Math.round(cz) + az;
+      for (var cy = height[pz2 * sx + px2]; cy <= ch0; cy++) vol.set(px2, cy, pz2, B.FLAG.id);
+      for (var cy2 = ch0 + 1; cy2 < sy; cy2++) if (vol.get(px2, cy2, pz2) !== 0) vol.set(px2, cy2, pz2, 0);
+      height[pz2 * sx + px2] = ch0;
+      surfBlock[pz2 * sx + px2] = B.FLAG.id;
+    }
+
+    var cw = Math.floor(sx / CELL), chh = Math.floor(sz / CELL);
+    var wallGrid = [];
+    for (var r = 0; r < chh; r++) {
+      wallGrid[r] = [];
+      for (var c = 0; c < cw; c++) {
+        var bx = c * CELL + 1, bz = r * CELL + 1;
+        wallGrid[r][c] = height[N.clamp(bz, 0, sz - 1) * sx + N.clamp(bx, 0, sx - 1)] <= WATER + 0.6;
+      }
+    }
+
+    return {
+      vol: vol, height: height, surfBlock: surfBlock,
+      sx: sx, sy: sy, sz: sz, wallH: 2,
+      wallGrid: wallGrid, cells: { w: cw, h: chh },
+      mazeX0: 0, mazeZ0: 0, CELL: CELL, BASE: BASE, WATER: WATER,
+      playerCell: [Math.floor(cx / CELL), Math.floor(cz / CELL)],
+      exitCell: [Math.floor(cx / CELL), Math.floor(cz / CELL)],
+      copCells: [], decor: [], lanterns: [], rnd: rnd,
+      creative: true,
+      startPos: { x: Math.round(cx) + 0.5, y: ch0 + 1, z: Math.round(cz) + 0.5 }
+    };
+  }
+
   global.WORLD = {
-    init: init, generate: generate, generateParkour: generateParkour, buildMesh: buildMesh, Volume: Volume,
+    init: init, generate: generate, generateParkour: generateParkour, generateCreative: generateCreative, buildMesh: buildMesh, Volume: Volume,
     addGrassTufts: addGrassTufts, addWallVines: addWallVines,
     Mesher: Mesher, CELL: CELL, BASE: BASE, WATER: WATER, MARGIN: MARGIN,
     blocks: function () { return B; }
