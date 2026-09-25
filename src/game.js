@@ -5,7 +5,17 @@
 (function (global) {
   'use strict';
   var THREE = global.THREE;
-  var $ = function (id) { return document.getElementById(id); };
+  // заглушка на случай, когда браузер держит в кэше старую разметку:
+  // без неё одна отсутствующая кнопка роняла всю привязку управления
+  var DUMMY = {
+    style: {}, children: [], innerHTML: '', textContent: '', dataset: {},
+    classList: { toggle: function () { }, add: function () { }, remove: function () { }, contains: function () { return false; } },
+    addEventListener: function () { }, appendChild: function () { },
+    querySelector: function () { return null; }, getContext: function () { return null; },
+    getBoundingClientRect: function () { return { left: 0, top: 0, width: 1, height: 1 }; },
+    firstElementChild: { style: {} }
+  };
+  var $ = function (id) { return document.getElementById(id) || DUMMY; };
 
   // ------------------------------------------------------------------
   //  Настройки и сохранения
@@ -435,6 +445,28 @@
   //  Управление
   // ------------------------------------------------------------------
   function bindUI() {
+    // ---- клавиатура: вешаем первой, чтобы управление жило при любых сюрпризах ----
+    window.addEventListener('keydown', function (e) {
+      input.keys[e.code] = true;
+      var k = e.code || '', key = e.key || '';
+      if (k === 'Escape' || key === 'Escape') { if (S.screen === 'game') pause(!S.paused); }
+      if (k === 'Space') { input.jump = true; e.preventDefault(); }
+      // смена вида: F5 как в майне (перезагрузку браузера гасим) или V
+      if (k === 'F5' || key === 'F5' || k === 'KeyV' || key === 'v' || key === 'V' ||
+          key === 'м' || key === 'М') {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleView(1);
+        return false;
+      }
+      global.SFX.resume();
+    }, true);
+    window.addEventListener('keyup', function (e) { input.keys[e.code] = false; });
+    window.addEventListener('blur', function () { if (S.screen === 'game' && !S.paused) pause(true); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden && S.screen === 'game' && !S.paused) pause(true);
+    });
+
     // кнопки меню
     $('btnPlay').onclick = function () { goFullscreen(); startGame(); };
     $('btnChar').onclick = function () { show('charPanel'); S.charPreview = true; S.previewAngle = 0; };
@@ -609,19 +641,6 @@
     hold($('btnJump'), function () { input.jump = true; });
     hold($('btnRun'), function () { input.run = true; }, function () { input.run = false; });
 
-    // клавиатура
-    window.addEventListener('keydown', function (e) {
-      input.keys[e.code] = true;
-      if (e.code === 'Escape') { if (S.screen === 'game') pause(!S.paused); }
-      if (e.code === 'Space') { input.jump = true; e.preventDefault(); }
-      if (e.code === 'F5' || e.code === 'KeyV') { cycleView(1); e.preventDefault(); }
-      global.SFX.resume();
-    });
-    window.addEventListener('keyup', function (e) { input.keys[e.code] = false; });
-    window.addEventListener('blur', function () { if (S.screen === 'game' && !S.paused) pause(true); });
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden && S.screen === 'game' && !S.paused) pause(true);
-    });
   }
 
   function syncGfxUI() {
@@ -1106,7 +1125,8 @@
     var L = S.level, p = S.player;
     if (!L || !p) return;
     var cv = $('minimap');
-    if (!mmCtx) mmCtx = cv.getContext('2d');
+    if (!mmCtx) mmCtx = cv.getContext && cv.getContext('2d');
+    if (!mmCtx) return;
     var g = mmCtx, W = cv.width, H = cv.height;
     var R = 6;                     // радиус обзора в клетках
     var cs = W / (R * 2 + 1);
