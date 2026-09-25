@@ -12,7 +12,7 @@
   // ------------------------------------------------------------------
   var CFG = {
     difficulty: 1, skin: 0, quality: 'high',
-    rays: 1, ao: 1, bloom: 1, fps: 0
+    rays: 1, ao: 1, bloom: 1, fps: 0, view: 1
   };
   function loadCfg() {
     try {
@@ -43,7 +43,8 @@
     depthMatObj: null, blockMat: null, folMat: null, lanternLights: []
   };
 
-  var cam = { yaw: 0.6, pitch: 0.12, dist: 5.0, curDist: 5.0, minDist: 1.25,
+  var VIEWS = ['ОТ ПЕРВОГО ЛИЦА', 'ОТ ТРЕТЬЕГО ЛИЦА', 'ВИД СПЕРЕДИ'];
+  var cam = { yaw: 0.6, pitch: 0.12, view: 1, dist: 5.0, curDist: 5.0, minDist: 1.25,
               curHeight: 1.6, follow: new THREE.Vector3(), lookY: 1.28, ready: false,
               pos: new THREE.Vector3(), shake: 0 };
 
@@ -51,6 +52,24 @@
   // именно из-за обычного lerp*dt камеру и дёргало на просадках
   function damp(cur, target, lambda, dt) {
     return target + (cur - target) * Math.exp(-lambda * dt);
+  }
+
+  // от первого лица головой можно крутить сильнее, чем камерой за спиной
+  function clampPitch(v) {
+    var lo = cam.view === 0 ? -1.42 : -0.45;
+    var hi = cam.view === 0 ? 1.42 : 0.85;
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  // переключение вида по кругу, как F5 в майне
+  function cycleView(dir) {
+    cam.view = (cam.view + (dir || 1) + VIEWS.length) % VIEWS.length;
+    CFG.view = cam.view; saveCfg();
+    cam.pitch = clampPitch(cam.pitch);
+    document.body.classList.toggle('fpv', cam.view === 0);
+    var b = $('btnView');
+    if (b) b.textContent = ['1‑е', '3‑е', 'спер'][cam.view];
+    if (S.screen === 'game') toast(VIEWS[cam.view]);
   }
   var input = {
     mx: 0, my: 0, run: false, jump: false,
@@ -429,6 +448,7 @@
       buildLevel(CFG.difficulty);
     };
     $('btnPause').onclick = function () { pause(true); };
+    $('btnView').onclick = function () { cycleView(1); };
     $('pResume').onclick = function () { pause(false); };
     $('pRestart').onclick = function () { startGame(); };
     $('pMenu').onclick = function () { toMenu(); };
@@ -540,7 +560,7 @@
         var dx = t.clientX - input.lookX, dy = t.clientY - input.lookY;
         input.lookX = t.clientX; input.lookY = t.clientY;
         cam.yaw -= dx * 0.0055;
-        cam.pitch = Math.max(-0.45, Math.min(0.85, cam.pitch + dy * 0.0042));
+        cam.pitch = clampPitch(cam.pitch + dy * 0.0042);
       }
     }
     function lookEnd(e) {
@@ -566,12 +586,12 @@
         if (Math.abs(mx) > 200) mx = 0;
         if (Math.abs(my) > 200) my = 0;
         cam.yaw -= mx * 0.0024;
-        cam.pitch = Math.max(-0.45, Math.min(0.85, cam.pitch + my * 0.0019));
+        cam.pitch = clampPitch(cam.pitch + my * 0.0019);
         return;
       }
       if (!dragging) return;
       cam.yaw -= (e.clientX - lx) * 0.005;
-      cam.pitch = Math.max(-0.45, Math.min(0.85, cam.pitch + (e.clientY - ly) * 0.004));
+      cam.pitch = clampPitch(cam.pitch + (e.clientY - ly) * 0.004);
       lx = e.clientX; ly = e.clientY;
     });
     document.addEventListener('pointerlockchange', onLockChange);
@@ -594,6 +614,7 @@
       input.keys[e.code] = true;
       if (e.code === 'Escape') { if (S.screen === 'game') pause(!S.paused); }
       if (e.code === 'Space') { input.jump = true; e.preventDefault(); }
+      if (e.code === 'F5' || e.code === 'KeyV') { cycleView(1); e.preventDefault(); }
       global.SFX.resume();
     });
     window.addEventListener('keyup', function (e) { input.keys[e.code] = false; });
@@ -671,6 +692,9 @@
     S.coins.forEach(function (c) { c.taken = false; });
     if (S.coinMesh) S.coinMesh.count = S.coins.length;
     cam.pitch = 0.12; cam.curDist = cam.dist; cam.ready = false;
+    cam.view = CFG.view % VIEWS.length;
+    document.body.classList.toggle('fpv', cam.view === 0);
+    var bv = $('btnView'); if (bv) bv.textContent = ['1‑е', '3‑е', 'спер'][cam.view];
     if (S.player) S.player.char.root.visible = true;
     S.fpMode = false;
     (function () {
@@ -930,10 +954,35 @@
     var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
     var pitch = cam.pitch, cosP = Math.cos(pitch);
 
+    // от первого лица персонажа не рисуем — иначе камера внутри головы
+    var showBody = cam.view !== 0;
+    if (p.char.root.visible !== showBody) p.char.root.visible = showBody;
+
+    if (cam.view === 0) {
+      var eye = 1.64;
+      cam.curDist = damp(cam.curDist, 0, 22, dt);
+      cam.curHeight = damp(cam.curHeight, eye, 14, dt);
+      var ey = f.y + cam.curHeight;
+      eng.camera.position.set(f.x, ey, f.z);
+      if (cam.shake > 0) {
+        eng.camera.position.x += (Math.random() - 0.5) * cam.shake * 0.1;
+        eng.camera.position.y += (Math.random() - 0.5) * cam.shake * 0.1;
+        cam.shake = Math.max(0, cam.shake - dt * 2);
+      }
+      cam.lookY = ey - Math.sin(pitch) * 5.0;
+      _look.set(f.x + sy * cosP * 5.0, cam.lookY, f.z + cy * cosP * 5.0);
+      eng.camera.lookAt(_look);
+      eng.shadowTarget.set(p.x, p.y, p.z);
+      return;
+    }
+
+    // 1 — камера за спиной, 2 — перед лицом (тогда отходим в другую сторону)
+    var sign = cam.view === 2 ? -1 : 1;
+
     // дистанция, на которой камера ещё не в стене
     var wanted = cam.dist;
     for (var t = 0.55; t <= cam.dist; t += 0.16) {
-      var qx = f.x - sy * cosP * t, qz = f.z - cy * cosP * t;
+      var qx = f.x - sign * sy * cosP * t, qz = f.z - sign * cy * cosP * t;
       if (blocked(qx, qz, 0.30)) { wanted = Math.max(cam.minDist, t - 0.38); break; }
     }
     // подъезжаем к игроку быстро, отъезжаем медленно — на углах не швыряет
@@ -945,7 +994,7 @@
     cam.curHeight = damp(cam.curHeight, wantH, 7, dt);
 
     var back = cosP * cam.curDist;
-    eng.camera.position.set(f.x - sy * back, f.y + cam.curHeight, f.z - cy * back);
+    eng.camera.position.set(f.x - sign * sy * back, f.y + cam.curHeight, f.z - sign * cy * back);
 
     if (cam.shake > 0) {
       eng.camera.position.x += (Math.random() - 0.5) * cam.shake * 0.1;
@@ -971,6 +1020,7 @@
       var bx = e0.x, bz = e0.z + 3.2;
       S.player.char.root.position.set(bx, by, bz);
       S.player.char.root.rotation.y = S.previewAngle;
+      S.player.char.root.visible = true;
       global.CHAR.setDetail(S.player.char, true);
       global.CHAR.update(S.player.char, dt, { speed: 0 });
       eng.camera.position.set(bx, by + 1.28, bz + 2.30);
@@ -989,6 +1039,7 @@
     eng.shadowTarget.set(cx, global.WORLD.BASE, cz);
     eng.shadowRadius = 60;
     if (S.player) {
+      S.player.char.root.visible = true;
       // персонаж стоит у портала и оглядывается
       var e = L.exit;
       S.player.char.root.position.set(e.x, global.WORLD.BASE + 1, e.z + 2.2);
