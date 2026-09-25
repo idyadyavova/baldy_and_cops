@@ -22,8 +22,9 @@
   // ------------------------------------------------------------------
   var CFG = {
     difficulty: 1, skin: 0, quality: 'high',
-    rays: 1, ao: 1, bloom: 1, fps: 0, view: 1
+    rays: 1, ao: 1, bloom: 1, fps: 0, view: 1, sens: 1
   };
+  var SENS = [0.55, 0.85, 1.25];   // множители скорости поворота камеры
   function loadCfg() {
     try {
       var j = JSON.parse(localStorage.getItem('baldy3d_cfg') || '{}');
@@ -54,7 +55,8 @@
   };
 
   var VIEWS = ['ОТ ПЕРВОГО ЛИЦА', 'ОТ ТРЕТЬЕГО ЛИЦА', 'ВИД СПЕРЕДИ'];
-  var cam = { yaw: 0.6, pitch: 0.12, view: 1, dist: 5.0, curDist: 5.0, minDist: 1.25,
+  var cam = { yaw: 0.6, pitch: 0.12, yawT: 0.6, pitchT: 0.12, view: 1, dist: 5.0, curDist: 5.0, minDist: 1.25,
+              roll: 0,
               curHeight: 1.6, follow: new THREE.Vector3(), lookY: 1.28, ready: false,
               pos: new THREE.Vector3(), shake: 0 };
 
@@ -65,6 +67,16 @@
   }
 
   // от первого лица головой можно крутить сильнее, чем камерой за спиной
+  function sens() { return SENS[CFG.sens] || 0.85; }
+
+  // камера крутится к цели плавно — резкие рывки пальца больше не швыряют вид
+  function updateLook(dt) {
+    var d = ((cam.yawT - cam.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    var k = 1 - Math.exp(-22 * dt);
+    cam.yaw += d * k;
+    cam.pitch += (cam.pitchT - cam.pitch) * k;
+  }
+
   function clampPitch(v) {
     var lo = cam.view === 0 ? -1.42 : -0.45;
     var hi = cam.view === 0 ? 1.42 : 0.85;
@@ -75,7 +87,7 @@
   function cycleView(dir) {
     cam.view = (cam.view + (dir || 1) + VIEWS.length) % VIEWS.length;
     CFG.view = cam.view; saveCfg();
-    cam.pitch = clampPitch(cam.pitch);
+    cam.pitch = clampPitch(cam.pitch); cam.pitchT = cam.pitch;
     document.body.classList.toggle('fpv', cam.view === 0);
     var b = $('btnView');
     if (b) b.textContent = ['1‑е', '3‑е', 'спер'][cam.view];
@@ -165,7 +177,15 @@
     cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     if (S.eng) S.eng.resize(cv.width, cv.height, 1);
-    if (S.eng) { S.eng.camera.aspect = w / h; S.eng.camera.updateProjectionMatrix(); }
+    if (S.eng) {
+      var asp = w / h;
+      S.eng.camera.aspect = asp;
+      // в портрете вертикальный угол расширяем, иначе по горизонтали вид как в трубе
+      var hFov = 74 * Math.PI / 180;
+      var vFov = 2 * Math.atan(Math.tan(hFov / 2) / Math.max(asp, 0.35));
+      S.eng.camera.fov = Math.max(58, Math.min(78, vFov * 180 / Math.PI));
+      S.eng.camera.updateProjectionMatrix();
+    }
   }
 
   function applyGfx() {
@@ -205,7 +225,7 @@
     var D = DIFF[diff];
     var map = global.MAPS[D.map];
     var B = global.WORLD.init(global.TEX.TILES);
-    var world = global.WORLD.generate(THREE, map, 1000 + diff * 77, {});
+    var world = global.WORLD.generate(THREE, map, 1000 + diff * 77, { wallHeight: 2 });
     var mesh = global.WORLD.buildMesh(THREE, world.vol, B, true);
     global.WORLD.addGrassTufts(mesh.foliage, world, global.TEX.TILES, eng.Q.grass);
     global.WORLD.addWallVines(mesh.foliage, world, global.TEX.TILES, Math.min(0.5, eng.Q.grass * 0.42));
@@ -336,6 +356,7 @@
     var pc = world.playerCell || [1, 1];
     var pw = L.cellToWorld(pc[0], pc[1]);
     var pchar = global.CHAR.build(THREE, eng.common, CFG.skin, false, S.depthMatObj);
+    pchar.root.rotation.order = 'YXZ';
     eng.scene.add(pchar.root);
     S.player = {
       char: pchar, x: pw.x, z: pw.z, y: BASE + 1, vy: 0, vx: 0, vz: 0,
@@ -543,6 +564,7 @@
     seg('segRays', null, function (v) { CFG.rays = v; });
     seg('segAO', null, function (v) { CFG.ao = v; });
     seg('segBloom', null, function (v) { CFG.bloom = v; });
+    seg('segSens', null, function (v) { CFG.sens = v; });
     seg('segFps', null, function (v) { CFG.fps = v; });
 
     // джойстик
@@ -595,8 +617,8 @@
         if (t.identifier !== input.lookId) continue;
         var dx = t.clientX - input.lookX, dy = t.clientY - input.lookY;
         input.lookX = t.clientX; input.lookY = t.clientY;
-        cam.yaw -= dx * 0.0055;
-        cam.pitch = clampPitch(cam.pitch + dy * 0.0042);
+        cam.yawT -= dx * 0.0034 * sens();
+        cam.pitchT = clampPitch(cam.pitchT + dy * 0.0026 * sens());
       }
     }
     function lookEnd(e) {
@@ -625,13 +647,13 @@
         // страховка от «телепортов» курсора при переключении окна
         if (Math.abs(mx) > 200) mx = 0;
         if (Math.abs(my) > 200) my = 0;
-        cam.yaw -= mx * 0.0024;
-        cam.pitch = clampPitch(cam.pitch + my * 0.0019);
+        cam.yawT -= mx * 0.0017 * sens();
+        cam.pitchT = clampPitch(cam.pitchT + my * 0.0013 * sens());
         return;
       }
       if (!dragging) return;
-      cam.yaw -= (e.clientX - lx) * 0.005;
-      cam.pitch = clampPitch(cam.pitch + (e.clientY - ly) * 0.004);
+      cam.yawT -= (e.clientX - lx) * 0.0034 * sens();
+      cam.pitchT = clampPitch(cam.pitchT + (e.clientY - ly) * 0.0027 * sens());
       lx = e.clientX; ly = e.clientY;
     });
     document.addEventListener('pointerlockchange', onLockChange);
@@ -661,7 +683,7 @@
       });
     }
     mark('segQ', CFG.quality); mark('segRays', CFG.rays); mark('segAO', CFG.ao);
-    mark('segBloom', CFG.bloom); mark('segFps', CFG.fps);
+    mark('segBloom', CFG.bloom); mark('segFps', CFG.fps); mark('segSens', CFG.sens);
   }
 
   function updateMenuTexts() {
@@ -712,7 +734,11 @@
     } catch (e) { }
   }
 
-  function hideDeathFx() { var el = $('deathFx'); if (el && el.style) el.style.display = 'none'; }
+  function hideDeathFx() {
+    S.fxOn = false;
+    var el = $('deathFx'); if (el && el.style) el.style.display = 'none';
+    var cv = $('noiseCv'); if (cv && cv.style) cv.style.opacity = '0';
+  }
 
   function startGame() {
     hideDeathFx();
@@ -722,7 +748,7 @@
     S.startGrace = 3.0; S.alertLevel = 0; S.seenAny = false;
     S.coins.forEach(function (c) { c.taken = false; });
     if (S.coinMesh) S.coinMesh.count = S.coins.length;
-    cam.pitch = 0.12; cam.curDist = cam.dist; cam.ready = false;
+    cam.pitch = 0.12; cam.pitchT = 0.12; cam.curDist = cam.dist; cam.ready = false; cam.roll = 0;
     cam.view = CFG.view % VIEWS.length;
     document.body.classList.toggle('fpv', cam.view === 0);
     var bv = $('btnView'); if (bv) bv.textContent = ['1‑е', '3‑е', 'спер'][cam.view];
@@ -744,7 +770,7 @@
         var sc = Math.min(b, 3) * 3.0 + f * 0.6;
         if (sc > bestScore) { bestScore = sc; best = dirs[i][2]; }
       }
-      cam.yaw = best;
+      cam.yaw = best; cam.yawT = best;
       S.player.yaw = best;
     })();
     S.screen = 'game';
@@ -782,36 +808,29 @@
   }
 
   // Резкая темнота и телевизионные помехи в момент поимки
-  function deathFx(done) {
+  function deathFx() {
     var el = $('deathFx'), cv = $('noiseCv');
-    if (!el || !el.style) { if (done) done(); return; }
+    if (!el || !el.style) return;
     el.style.display = 'block';
+    S.fxOn = true;
     var ctx = cv.getContext && cv.getContext('2d');
     var W = 170, H = 300, img = null;
     if (ctx) { cv.width = W; cv.height = H; img = ctx.createImageData(W, H); cv.style.opacity = '0'; }
-    global.SFX.static(1.05);
-    var t0 = performance.now(), alive = true;
-
-    // длительность держим на таймере, а не на кадрах:
-    // на слабом устройстве кадр может прийти позже, чем закончится эффект
-    setTimeout(function () {
-      alive = false;
-      el.style.display = 'none';
-      if (ctx) cv.style.opacity = '0';
-      if (done) done();
-    }, 1300);
-
-    function frame() {
-      if (!alive) return;
-      var t = (performance.now() - t0) / 1000;
-      if (ctx && t > 0.16) {
-        cv.style.opacity = String(Math.min(1, (t - 0.16) * 9) * (t > 1.05 ? Math.max(0, (1.3 - t) / 0.25) : 1));
-        var d = img.data, roll = (t * 420) % H;
+    global.SFX.static(2.4);
+    var t0 = performance.now(), last = 0;
+    function frame(now) {
+      if (!S.fxOn) return;
+      var t = (now - t0) / 1000;
+      // помехи рисуем ~20 кадров в секунду — этого хватает, а батарею бережём
+      if (ctx && t > 0.15 && now - last > 48) {
+        last = now;
+        cv.style.opacity = String(Math.min(0.92, (t - 0.15) * 6));
+        var d = img.data, roll = (t * 430) % H;
         for (var y = 0; y < H; y++) {
           var band = Math.abs(((y + roll) % H) - H * 0.5) < 12 ? 70 : 0;
           var line = (Math.random() < 0.014) ? 120 : 0;
           for (var x = 0; x < W; x++) {
-            var v = (Math.random() * 235) | 0;
+            var v = (Math.random() * 230) | 0;
             v = v + band + line; if (v > 255) v = 255;
             var i = (y * W + x) << 2;
             d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
@@ -839,8 +858,8 @@
     var b = bestTime(CFG.difficulty);
     if (win && (b === 0 || S.time < b)) { setBest(CFG.difficulty, S.time); b = S.time; $('endSub').textContent = 'Новый рекорд!'; }
     $('endBest').textContent = b > 0 ? fmtTime(b) : '—';
-    if (win) show('endPanel');
-    else { show('hud'); deathFx(function () { show('endPanel'); }); }
+    if (!win && !S.fxOn) deathFx();     // если проиграли без сцены (отладка)
+    show('endPanel');
   }
 
   // ------------------------------------------------------------------
@@ -871,11 +890,13 @@
     p.vx = damp(p.vx, tx, accel, dt);
     p.vz = damp(p.vz, tz, accel, dt);
 
-    var r = 0.34;
+    // радиус меньше, чем был, и вместо отскока — скольжение вдоль стены
+    var r = 0.27;
     var nx = p.x + p.vx * dt;
-    if (!blocked(nx, p.z, r)) p.x = nx; else p.vx *= -0.1;
+    if (!blocked(nx, p.z, r)) p.x = nx;
+    else p.vx = 0;
     var nz = p.z + p.vz * dt;
-    if (!blocked(p.x, nz, r)) p.z = nz; else p.vz *= -0.1;
+    if (!blocked(p.x, nz, r)) p.z = nz; else p.vz = 0;
 
     // прыжок и гравитация
     var groundY = BASE + 1;
@@ -893,13 +914,13 @@
     p.punch = Math.max(0, p.punch - dt / 0.34);
     p.punchCd = Math.max(0, p.punchCd - dt);
     if (input.hit && p.punchCd <= 0 && S.screen === 'game' && S.startGrace <= 0) {
-      p.punch = 1; p.punchCd = 0.50;
-      p.punchPending = true;
-      p.stamina = Math.max(0, p.stamina - 0.06);
+      p.punch = 1; p.punchCd = 0.42;
+      p.yaw = cam.yaw;                       // разворачиваемся туда, куда смотрит камера
+      p.stamina = Math.max(0, p.stamina - 0.05);
       global.SFX.punch();
+      resolvePunch();                        // попадание считаем сразу, без задержки
     }
     input.hit = false;
-    if (p.punchPending && p.punch < 0.55) { p.punchPending = false; resolvePunch(); }
 
     p.speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
     if (p.speed > 0.25) {
@@ -931,15 +952,15 @@
   // кого достаём кулаком: сектор перед игроком
   function resolvePunch() {
     var p = S.player, D = DIFF[S.level.diff];
-    var fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+    var fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);   // направление взгляда
     var hit = false;
     for (var i = 0; i < S.cops.length; i++) {
       var c = S.cops[i];
       if (c.stun > 0) continue;
       var dx = c.x - p.x, dz = c.z - p.z;
       var d = Math.sqrt(dx * dx + dz * dz);
-      if (d > 2.1) continue;
-      if (d > 0.05 && (dx / d * fx + dz / d * fz) < 0.30) continue;   // бьём только вперёд
+      if (d > 2.4) continue;
+      if (d > 0.05 && (dx / d * fx + dz / d * fz) < -0.15) continue;  // почти весь сектор перед собой
       c.stun = D.stun;
       c.alert = 0; c.grab = 0; c.lastKnown = null;
       c.path = []; c.pathIdx = 0; c.repathTimer = 0.5;
@@ -1067,10 +1088,10 @@
         global.CHAR.update(c.char, dt, { speed: c.speed, angry: c.alert > 0.5 });
       }
 
-      // поимка: мент должен продержаться рядом мгновение — есть шанс ударить
-      if (distP < 0.78 && S.startGrace <= 0 && S.screen === 'game') {
+      // поимка: мент должен продержаться рядом — есть время ударить первым
+      if (distP < 0.80 && S.startGrace <= 0 && S.screen === 'game') {
         c.grab += dt;
-        if (c.grab > 0.26) endGame(false);
+        if (c.grab > 0.45) startCatch(c);
       } else c.grab = 0;
     }
     S.seenAny = anySeen;
@@ -1080,11 +1101,63 @@
   }
 
   // ------------------------------------------------------------------
+  //  Поимка: мент толкает, игрок падает, потом помехи
+  // ------------------------------------------------------------------
+  function startCatch(c) {
+    if (S.screen !== 'game') return;
+    var p = S.player;
+    S.screen = 'caught'; S.catchT = 0; S.catchCop = c; S.catchFx = false;
+    S.catchStart = performance.now();
+    var dx = p.x - c.x, dz = p.z - c.z, d = Math.sqrt(dx * dx + dz * dz) || 1;
+    p.vx = dx / d * 5.2; p.vz = dz / d * 5.2; p.fall = 0; p.punch = 0;
+    c.yaw = Math.atan2(-dx / d, -dz / d);
+    c.pushT = 1; c.speed = 0;
+    global.SFX.siren(false);
+    global.SFX.hit();
+    cam.shake = 1.8;
+    toast('ПОПАЛСЯ!');
+  }
+
+  function updateCatch(dt) {
+    var p = S.player, c = S.catchCop;
+    S.catchT += dt;
+    var r = 0.27;
+    var nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
+    if (!blocked(nx, p.z, r)) p.x = nx;
+    if (!blocked(p.x, nz, r)) p.z = nz;
+    var k = Math.exp(-5 * dt);
+    p.vx *= k; p.vz *= k;
+    var elapsed = (performance.now() - S.catchStart) / 1000;
+    p.fall = Math.min(1, elapsed / 0.5);       // падение тоже по реальному времени
+    p.char.root.position.set(p.x, p.y + 0.10 * p.fall, p.z);
+    p.char.root.rotation.set(-1.34 * p.fall, p.yaw, 0);
+    p.char.root.visible = true;
+    global.CHAR.update(p.char, dt, { speed: 0, down: p.fall, scared: true });
+    if (c) {
+      c.pushT = Math.max(0, 1 - elapsed / 0.45);
+      c.char.root.visible = true;
+      c.char.root.position.set(c.x, c.y, c.z);
+      c.char.root.rotation.set(0, c.yaw, 0);
+      global.CHAR.setDetail(c.char, true);
+      global.CHAR.update(c.char, dt, { speed: 0, punch: c.pushT, angry: true });
+    }
+    updateCamera(dt);
+    // порог по настоящему времени: на слабом устройстве кадры редкие,
+    // и по сумме dt сцена могла не доиграть до конца
+    if (!S.catchFx && (performance.now() - S.catchStart) / 1000 > 0.85) {
+      S.catchFx = true;
+      deathFx();
+      setTimeout(function () { endGame(false); }, 620);
+    }
+  }
+
+  // ------------------------------------------------------------------
   //  Камера
   // ------------------------------------------------------------------
   var _desired = new THREE.Vector3(), _look = new THREE.Vector3();
   function updateCamera(dt) {
     var p = S.player, eng = S.eng;
+    updateLook(dt);
     if (!cam.ready) {
       cam.follow.set(p.x, p.y, p.z);
       cam.curDist = cam.dist; cam.curHeight = 1.6; cam.lookY = p.y + 1.28;
@@ -1137,6 +1210,7 @@
     var squeeze = 1 - Math.min(1, (cam.curDist - cam.minDist) / Math.max(0.001, cam.dist - cam.minDist));
     // в тесноте камера поднимается над игроком вместо прыжков в вид от первого лица
     var wantH = Math.min(2.5, 1.50 + Math.sin(pitch) * 2.2 + squeeze * 0.95);
+    if (S.screen === 'caught') wantH *= 0.42;     // камера валится вместе с игроком
     cam.curHeight = damp(cam.curHeight, wantH, 7, dt);
 
     var back = cosP * cam.curDist;
@@ -1149,10 +1223,13 @@
     }
 
     // при взгляде вверх цель поднимается — видно небо
-    var wantLookY = p.y + 1.28 - Math.min(0, pitch) * 3.0 + squeeze * 0.30;
+    var wantLookY = p.y + 1.16 - Math.min(0, pitch) * 3.0 + squeeze * 0.30;
+    if (S.screen === 'caught') wantLookY = p.y + 0.55;
     cam.lookY = damp(cam.lookY, wantLookY, 9, dt);
     _look.set(f.x, cam.lookY, f.z);
     eng.camera.lookAt(_look);
+    cam.roll = damp(cam.roll, S.screen === 'caught' ? 0.40 : 0, 4.5, dt);
+    if (Math.abs(cam.roll) > 0.001) eng.camera.rotateZ(cam.roll);
     eng.shadowTarget.set(p.x, p.y, p.z);
   }
 
@@ -1341,6 +1418,13 @@
     eng.common.uTime.value += dt;
     if (S.level && S.level.motes) S.level.motes.uniforms.uPixel.value = eng.rtH ? eng.rtH * 0.55 : 600;
 
+    if (S.screen === 'caught') {
+      updateCatch(dt);
+      updateLights();
+      if (!S.fxOn) eng.render(dt);
+      return;
+    }
+
     if (S.screen === 'game' && !S.paused) {
       S.time += dt;
       if (S.startGrace > 0) S.startGrace -= dt;
@@ -1361,6 +1445,9 @@
       }
     }
     updateLights();
+
+    // под помехами сцену не рисуем — ни к чему греть телефон
+    if (S.fxOn) return;
 
     // адаптивное разрешение: держим плавность на слабых телефонах
     S.fpsAcc += dt; S.fpsCount++;

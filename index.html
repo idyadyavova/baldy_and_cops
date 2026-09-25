@@ -23,12 +23,12 @@
     font-family:'Trebuchet MS','Segoe UI',system-ui,-apple-system,sans-serif;color:var(--txt);
     touch-action:none; user-select:none; -webkit-user-select:none; overscroll-behavior:none;}
   #gl{position:fixed;inset:0;width:100%;height:100%;display:block;}
-  .layer{position:fixed;inset:0;display:none;flex-direction:column;z-index:10;}
+  .layer{position:fixed;inset:0;display:none;flex-direction:column;z-index:50;}
   .layer.on{display:flex;}
   .center{align-items:center;justify-content:center;}
 
   /* ---------- загрузка ---------- */
-  #loading{background:radial-gradient(120% 90% at 50% 10%,#16233d 0%,#080b12 60%,#05070c 100%);z-index:100;
+  #loading{background:radial-gradient(120% 90% at 50% 10%,#16233d 0%,#080b12 60%,#05070c 100%);z-index:120;
     align-items:center;justify-content:center;}
   .logo{font-size:clamp(30px,9vw,64px);font-weight:900;letter-spacing:.5px;text-align:center;line-height:1.05;
     background:linear-gradient(180deg,#fff2c9,var(--gold) 45%,var(--gold2));-webkit-background-clip:text;background-clip:text;
@@ -105,7 +105,7 @@
     border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
   #stamina i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--gold2),var(--gold))}
   /* поимка: резко чёрный экран и помехи */
-  #deathFx{position:fixed;inset:0;z-index:60;background:#000;display:none}
+  #deathFx{position:fixed;inset:0;z-index:40;background:#000;display:none}
   #deathFx canvas{width:100%;height:100%;display:block;image-rendering:pixelated;opacity:0}
   #alert{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
     box-shadow:inset 0 0 120px 30px rgba(255,40,40,.55)}
@@ -156,7 +156,7 @@
       <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
       <button class="btn" id="btnHelp">Как играть</button>
     </div>
-    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925c</div>
+    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925d</div>
     <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
   </div>
 </div>
@@ -184,6 +184,11 @@
     <div class="opt">Объёмные лучи <div class="seg" id="segRays"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
     <div class="opt">Затенение SSAO <div class="seg" id="segAO"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
     <div class="opt">Свечение (bloom) <div class="seg" id="segBloom"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
+    <div class="opt">Чувствительность камеры
+      <div class="seg" id="segSens">
+        <button data-v="0">Низк.</button><button data-v="1">Сред.</button><button data-v="2">Выс.</button>
+      </div>
+    </div>
     <div class="opt">Показывать FPS <div class="seg" id="segFps"><button data-v="0">Выкл</button><button data-v="1">Вкл</button></div></div>
     <div class="hint">На слабом телефоне выбирай «Низк.» или «Сред.»</div>
     <button class="btn main" style="margin-top:12px" id="gfxOk">Готово</button>
@@ -263,25 +268,25 @@
   </div>
 </div>
 
-<script src="lib/three.min.js?v=20260925c"></script>
+<script src="lib/three.min.js?v=20260925d"></script>
 <script>
   // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
   if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
 </script>
-<script src="src/noise.js?v=20260925c"></script>
-<script src="src/textures.js?v=20260925c"></script>
-<script src="src/shaderlib.js?v=20260925c"></script>
-<script src="src/sky.js?v=20260925c"></script>
-<script src="src/materials.js?v=20260925c"></script>
-<script src="src/world.js?v=20260925c"></script>
-<script src="src/water.js?v=20260925c"></script>
-<script src="src/character.js?v=20260925c"></script>
-<script src="src/props.js?v=20260925c"></script>
-<script src="src/particles.js?v=20260925c"></script>
-<script src="src/post.js?v=20260925c"></script>
-<script src="src/engine.js?v=20260925c"></script>
-<script src="src/maps.js?v=20260925c"></script>
-<script src="src/audio.js?v=20260925c"></script>
-<script src="src/game.js?v=20260925c"></script>
+<script src="src/noise.js?v=20260925d"></script>
+<script src="src/textures.js?v=20260925d"></script>
+<script src="src/shaderlib.js?v=20260925d"></script>
+<script src="src/sky.js?v=20260925d"></script>
+<script src="src/materials.js?v=20260925d"></script>
+<script src="src/world.js?v=20260925d"></script>
+<script src="src/water.js?v=20260925d"></script>
+<script src="src/character.js?v=20260925d"></script>
+<script src="src/props.js?v=20260925d"></script>
+<script src="src/particles.js?v=20260925d"></script>
+<script src="src/post.js?v=20260925d"></script>
+<script src="src/engine.js?v=20260925d"></script>
+<script src="src/maps.js?v=20260925d"></script>
+<script src="src/audio.js?v=20260925d"></script>
+<script src="src/game.js?v=20260925d"></script>
 </body>
 </html>
