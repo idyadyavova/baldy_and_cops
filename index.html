@@ -95,10 +95,18 @@
     letter-spacing:.5px;backdrop-filter:blur(6px);touch-action:none}
   #btnJump{right:calc(22px + var(--safe-r));bottom:calc(112px + var(--safe-b));width:78px;height:78px;font-size:13px}
   #btnRun{right:calc(112px + var(--safe-r));bottom:calc(34px + var(--safe-b));width:70px;height:70px;font-size:12px}
+  #btnHit{right:calc(108px + var(--safe-r));bottom:calc(126px + var(--safe-b));width:68px;height:68px;font-size:13px;
+    color:#ffd7c9;border-color:rgba(255,140,110,.7);background:rgba(120,32,22,.55)}
+  #btnHit:active,#btnHit.on{background:rgba(255,90,60,.45);border-color:#ff6b4d}
+  #btnHit.cool{opacity:.35}
+  body.desktop #btnHit{display:none}
   .actBtn:active,.actBtn.on{background:rgba(255,201,77,.35);border-color:var(--gold)}
   #stamina{position:absolute;right:calc(22px + var(--safe-r));bottom:calc(20px + var(--safe-b));width:78px;height:6px;
     border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
   #stamina i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--gold2),var(--gold))}
+  /* поимка: резко чёрный экран и помехи */
+  #deathFx{position:fixed;inset:0;z-index:60;background:#000;display:none}
+  #deathFx canvas{width:100%;height:100%;display:block;image-rendering:pixelated;opacity:0}
   #alert{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
     box-shadow:inset 0 0 120px 30px rgba(255,40,40,.55)}
   #alertTxt{position:absolute;top:calc(74px + var(--safe-t));left:0;right:0;text-align:center;font-size:19px;font-weight:900;
@@ -148,7 +156,7 @@
       <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
       <button class="btn" id="btnHelp">Как играть</button>
     </div>
-    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925b</div>
+    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925c</div>
     <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
   </div>
 </div>
@@ -192,11 +200,13 @@
     <div class="stat"><span>Кнопка «ПРЫЖОК»</span><b>перепрыгнуть</b></div>
     <div class="stat"><span>Золотые монеты</span><b>очки</b></div>
     <div class="stat"><span>Зелёный портал</span><b>выход</b></div>
+    <div class="stat"><span>Кнопка «УДАР»</span><b>вырубить мента</b></div>
     <div class="stat"><span>Кнопка «3‑е» сверху</span><b>сменить вид</b></div>
     <div class="hint">Менты ищут тебя по лабиринту. Если увидят — побегут напрямую.<br>
       На компьютере: клик по экрану захватывает мышь, и камера крутится без зажатой кнопки.<br>
       WASD — идти, Shift — бег, Пробел — прыжок, Esc — пауза и снять захват.<br>
-      F5 или V — вид по кругу: от первого лица, от третьего, спереди.</div>
+      F5 или V — вид по кругу: от первого лица, от третьего, спереди.<br>
+      Удар — левая кнопка мыши или F. Оглушённый мент падает и пропускает.</div>
     <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
   </div>
 </div>
@@ -219,10 +229,13 @@
   <div id="alert"></div>
   <div id="alertTxt">ТЕБЯ ЗАМЕТИЛИ!</div>
   <div id="toast"></div>
+  <div class="actBtn" id="btnHit">УДАР</div>
   <div id="crosshair"></div>
-  <div id="mouseHint">Клик по экрану — захват мыши · WASD — идти · Shift — бег · Пробел — прыжок · Esc — пауза</div>
+  <div id="mouseHint">Клик — захват мыши · WASD — идти · Shift — бег · Пробел — прыжок · ЛКМ или F — удар · Esc — пауза</div>
   <div id="fps">0 fps</div>
 </div>
+
+<div id="deathFx"><canvas id="noiseCv"></canvas></div>
 
 <!-- ПАУЗА -->
 <div id="pausePanel" class="layer center">
@@ -250,25 +263,25 @@
   </div>
 </div>
 
-<script src="lib/three.min.js?v=20260925b"></script>
+<script src="lib/three.min.js?v=20260925c"></script>
 <script>
   // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
   if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
 </script>
-<script src="src/noise.js?v=20260925b"></script>
-<script src="src/textures.js?v=20260925b"></script>
-<script src="src/shaderlib.js?v=20260925b"></script>
-<script src="src/sky.js?v=20260925b"></script>
-<script src="src/materials.js?v=20260925b"></script>
-<script src="src/world.js?v=20260925b"></script>
-<script src="src/water.js?v=20260925b"></script>
-<script src="src/character.js?v=20260925b"></script>
-<script src="src/props.js?v=20260925b"></script>
-<script src="src/particles.js?v=20260925b"></script>
-<script src="src/post.js?v=20260925b"></script>
-<script src="src/engine.js?v=20260925b"></script>
-<script src="src/maps.js?v=20260925b"></script>
-<script src="src/audio.js?v=20260925b"></script>
-<script src="src/game.js?v=20260925b"></script>
+<script src="src/noise.js?v=20260925c"></script>
+<script src="src/textures.js?v=20260925c"></script>
+<script src="src/shaderlib.js?v=20260925c"></script>
+<script src="src/sky.js?v=20260925c"></script>
+<script src="src/materials.js?v=20260925c"></script>
+<script src="src/world.js?v=20260925c"></script>
+<script src="src/water.js?v=20260925c"></script>
+<script src="src/character.js?v=20260925c"></script>
+<script src="src/props.js?v=20260925c"></script>
+<script src="src/particles.js?v=20260925c"></script>
+<script src="src/post.js?v=20260925c"></script>
+<script src="src/engine.js?v=20260925c"></script>
+<script src="src/maps.js?v=20260925c"></script>
+<script src="src/audio.js?v=20260925c"></script>
+<script src="src/game.js?v=20260925c"></script>
 </body>
 </html>

@@ -72,6 +72,34 @@
       tone(220, 0.6, 'sawtooth', 0.16, 70);
       noiseBurst(0.5, 0.14, 200, 0.6);
     },
+    punch: function () {
+      noiseBurst(0.07, 0.20, 620, 1.4);
+      tone(150, 0.09, 'sine', 0.12, 70);
+    },
+    hit: function () {
+      noiseBurst(0.16, 0.30, 260, 0.7);
+      tone(95, 0.22, 'square', 0.16, 45);
+      setTimeout(function () { tone(320, 0.18, 'sawtooth', 0.08, 120); }, 60);
+    },
+    getup: function () { tone(210, 0.2, 'triangle', 0.08, 330); },
+    static: function (dur) {
+      if (!ctx || muted) return;
+      var t = ctx.currentTime;
+      dur = dur || 1.0;
+      var len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+      var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (0.55 + 0.45 * Math.sin(i * 0.0013));
+      var src = ctx.createBufferSource(); src.buffer = buf;
+      var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 900;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+      g.gain.setValueAtTime(0.28, t + dur * 0.7);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.05);
+    },
     whistle: function () {
       tone(2100, 0.22, 'sine', 0.12, 2600);
       setTimeout(function () { tone(2400, 0.18, 'sine', 0.10, 1900); }, 190);

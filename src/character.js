@@ -346,6 +346,35 @@
     ch.chest.rotation.z = Math.sin(p) * 0.05 * moving;
     ch.chest.rotation.x = -run * 0.10 + Math.sin(ch.t * 1.7) * 0.012;
 
+    // удар правой: замах и выброс руки
+    if (st.punch > 0) {
+      var pk = Math.min(1, Math.max(0, st.punch));       // 1 -> 0 за время удара
+      var ext = Math.sin((1 - pk) * Math.PI);            // 0 -> 1 -> 0
+      var wind = Math.max(0, pk - 0.55) * 2.2;           // замах в начале
+      ch.armR.shoulder.rotation.x = -1.45 * ext + 0.55 * wind;
+      ch.armR.shoulder.rotation.z = -0.18 - 0.35 * ext;
+      ch.armR.elbow.rotation.x = -1.25 + 1.05 * ext;
+      ch.armL.shoulder.rotation.x = 0.35 * ext;
+      ch.armL.elbow.rotation.x = -0.9 - 0.3 * ext;
+      ch.chest.rotation.y = -0.45 * ext + 0.25 * wind;
+      ch.hips.rotation.y = -0.18 * ext;
+    }
+
+    // нокдаун: тело обмякло
+    if (st.down) {
+      var dn = Math.min(1, st.down);
+      ch.legL.hip.rotation.x = -0.55 * dn; ch.legR.hip.rotation.x = -0.30 * dn;
+      ch.legL.knee.rotation.x = 0.75 * dn; ch.legR.knee.rotation.x = 1.05 * dn;
+      ch.armL.shoulder.rotation.x = 1.15 * dn; ch.armR.shoulder.rotation.x = 0.95 * dn;
+      ch.armL.shoulder.rotation.z = 0.75 * dn; ch.armR.shoulder.rotation.z = -0.75 * dn;
+      ch.armL.elbow.rotation.x = -0.35 * dn; ch.armR.elbow.rotation.x = -0.25 * dn;
+      ch.chest.rotation.x = 0.35 * dn; ch.chest.rotation.y = 0; ch.chest.rotation.z = 0;
+      ch.hips.rotation.x = 0; ch.hips.rotation.y = 0;
+      ch.neck.rotation.x = 0.45 * dn;
+      ch.mouth.scale.set(0.9, 1.9, 1);
+      ch.eyeL.scale.y = ch.eyeR.scale.y = 1 - 0.85 * dn;   // глаза в кучку
+    }
+
     // прыжок
     if (st.airborne) {
       ch.legL.hip.rotation.x = -0.55; ch.legR.hip.rotation.x = 0.25;

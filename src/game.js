@@ -35,9 +35,9 @@
   function setBest(d, t) { try { localStorage.setItem('baldy3d_best_' + d, String(t)); } catch (e) { } }
 
   var DIFF = {
-    1: { map: '1', name: 'Простой', cops: 2, copSpeed: 2.10, vision: 10, repath: 1.5, coins: 8, sun: 0.32, azim: 0.85, cloud: 0.56 },
-    2: { map: '2', name: 'Средний', cops: 3, copSpeed: 2.50, vision: 12, repath: 1.1, coins: 12, sun: 0.085, azim: 2.35, cloud: 0.47 },
-    3: { map: '3', name: 'Сложный', cops: 5, copSpeed: 2.72, vision: 14, repath: 0.8, coins: 16, sun: -0.40, azim: 1.6, cloud: 0.64 }
+    1: { map: '1', name: 'Простой', cops: 2, copSpeed: 2.10, vision: 10, repath: 1.5, stun: 7.0, coins: 8, sun: 0.32, azim: 0.85, cloud: 0.56 },
+    2: { map: '2', name: 'Средний', cops: 3, copSpeed: 2.50, vision: 12, repath: 1.1, stun: 6.0, coins: 12, sun: 0.085, azim: 2.35, cloud: 0.47 },
+    3: { map: '3', name: 'Сложный', cops: 5, copSpeed: 2.72, vision: 14, repath: 0.8, stun: 5.0, coins: 16, sun: -0.40, azim: 1.6, cloud: 0.64 }
   };
 
   // ------------------------------------------------------------------
@@ -82,7 +82,7 @@
     if (S.screen === 'game') toast(VIEWS[cam.view]);
   }
   var input = {
-    mx: 0, my: 0, run: false, jump: false,
+    mx: 0, my: 0, run: false, jump: false, hit: false,
     stickId: null, stickX: 0, stickY: 0, stickCX: 0, stickCY: 0,
     lookId: null, lookX: 0, lookY: 0, keys: {}
   };
@@ -339,7 +339,8 @@
     eng.scene.add(pchar.root);
     S.player = {
       char: pchar, x: pw.x, z: pw.z, y: BASE + 1, vy: 0, vx: 0, vz: 0,
-      yaw: 0, onGround: true, stamina: 1, speed: 0, stepTimer: 0, cell: pc.slice()
+      yaw: 0, onGround: true, stamina: 1, speed: 0, stepTimer: 0, cell: pc.slice(),
+      punch: 0, punchCd: 0, punchPending: false
     };
     S.levelSkin = CFG.skin;
 
@@ -360,12 +361,14 @@
       var sc = spots[i % spots.length];
       var w = L.cellToWorld(sc[0], sc[1]);
       var cchar = global.CHAR.build(THREE, eng.common, 0, true, S.depthMatObj);
+      cchar.root.rotation.order = 'YXZ';   // сначала разворот, потом падение назад
       cchar.root.position.set(w.x, BASE + 1, w.z);
       eng.scene.add(cchar.root);
       S.cops.push({
         char: cchar, x: w.x, z: w.z, y: BASE + 1, yaw: 0, speed: 0,
         path: [], pathIdx: 0, repathTimer: rnd() * 0.5, state: 'patrol',
-        target: null, lastKnown: null, alert: 0, whistle: 0, cell: sc.slice()
+        target: null, lastKnown: null, alert: 0, whistle: 0, cell: sc.slice(),
+        stun: 0, down: 0, kbx: 0, kbz: 0, grab: 0
       });
     }
   }
@@ -451,6 +454,7 @@
       var k = e.code || '', key = e.key || '';
       if (k === 'Escape' || key === 'Escape') { if (S.screen === 'game') pause(!S.paused); }
       if (k === 'Space') { input.jump = true; e.preventDefault(); }
+      if (k === 'KeyF' || key === 'f' || key === 'F' || key === 'а' || key === 'А') input.hit = true;
       // смена вида: F5 как в майне (перезагрузку браузера гасим) или V
       if (k === 'F5' || key === 'F5' || k === 'KeyV' || key === 'v' || key === 'V' ||
           key === 'м' || key === 'М') {
@@ -607,7 +611,11 @@
     var dragging = false, lx = 0, ly = 0;
     cv.addEventListener('mousedown', function (e) {
       global.SFX.resume();
-      if (S.screen === 'game' && !S.paused && !S.touch) { lockPointer(); return; }
+      if (S.screen === 'game' && !S.paused && !S.touch) {
+        if (isLocked()) { if (e.button === 0) input.hit = true; }
+        else lockPointer();
+        return;
+      }
       dragging = true; lx = e.clientX; ly = e.clientY;
     });
     window.addEventListener('mouseup', function () { dragging = false; });
@@ -638,6 +646,7 @@
       el.addEventListener('mouseup', function () { el.classList.remove('on'); if (off) off(); });
       el.addEventListener('mouseleave', function () { el.classList.remove('on'); if (off) off(); });
     }
+    hold($('btnHit'), function () { input.hit = true; });
     hold($('btnJump'), function () { input.jump = true; });
     hold($('btnRun'), function () { input.run = true; }, function () { input.run = false; });
 
@@ -703,7 +712,10 @@
     } catch (e) { }
   }
 
+  function hideDeathFx() { var el = $('deathFx'); if (el && el.style) el.style.display = 'none'; }
+
   function startGame() {
+    hideDeathFx();
     if (S.levelDiff !== CFG.difficulty) buildLevel(CFG.difficulty);
     else spawnActors();
     S.time = 0; S.coinsGot = 0; S.alive = true; S.won = false; S.paused = false;
@@ -742,6 +754,7 @@
     toast('НАЙДИ ВЫХОД!');
   }
   function toMenu() {
+    hideDeathFx();
     S.screen = 'menu'; S.paused = false;
     unlockPointer();
     if (S.player) { S.player.char.root.visible = true; S.fpMode = false; }
@@ -768,6 +781,49 @@
     toastTimer = 1.8;
   }
 
+  // Резкая темнота и телевизионные помехи в момент поимки
+  function deathFx(done) {
+    var el = $('deathFx'), cv = $('noiseCv');
+    if (!el || !el.style) { if (done) done(); return; }
+    el.style.display = 'block';
+    var ctx = cv.getContext && cv.getContext('2d');
+    var W = 170, H = 300, img = null;
+    if (ctx) { cv.width = W; cv.height = H; img = ctx.createImageData(W, H); cv.style.opacity = '0'; }
+    global.SFX.static(1.05);
+    var t0 = performance.now(), alive = true;
+
+    // длительность держим на таймере, а не на кадрах:
+    // на слабом устройстве кадр может прийти позже, чем закончится эффект
+    setTimeout(function () {
+      alive = false;
+      el.style.display = 'none';
+      if (ctx) cv.style.opacity = '0';
+      if (done) done();
+    }, 1300);
+
+    function frame() {
+      if (!alive) return;
+      var t = (performance.now() - t0) / 1000;
+      if (ctx && t > 0.16) {
+        cv.style.opacity = String(Math.min(1, (t - 0.16) * 9) * (t > 1.05 ? Math.max(0, (1.3 - t) / 0.25) : 1));
+        var d = img.data, roll = (t * 420) % H;
+        for (var y = 0; y < H; y++) {
+          var band = Math.abs(((y + roll) % H) - H * 0.5) < 12 ? 70 : 0;
+          var line = (Math.random() < 0.014) ? 120 : 0;
+          for (var x = 0; x < W; x++) {
+            var v = (Math.random() * 235) | 0;
+            v = v + band + line; if (v > 255) v = 255;
+            var i = (y * W + x) << 2;
+            d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   function endGame(win) {
     S.alive = !win ? false : true;
     S.won = win;
@@ -783,7 +839,8 @@
     var b = bestTime(CFG.difficulty);
     if (win && (b === 0 || S.time < b)) { setBest(CFG.difficulty, S.time); b = S.time; $('endSub').textContent = 'Новый рекорд!'; }
     $('endBest').textContent = b > 0 ? fmtTime(b) : '—';
-    show('endPanel');
+    if (win) show('endPanel');
+    else { show('hud'); deathFx(function () { show('endPanel'); }); }
   }
 
   // ------------------------------------------------------------------
@@ -832,6 +889,18 @@
       if (p.y <= groundY) { p.y = groundY; p.vy = 0; p.onGround = true; global.SFX.land(); }
     } else p.y = groundY;
 
+    // ---- удар: замах, попадание в середине, откат ----
+    p.punch = Math.max(0, p.punch - dt / 0.34);
+    p.punchCd = Math.max(0, p.punchCd - dt);
+    if (input.hit && p.punchCd <= 0 && S.screen === 'game' && S.startGrace <= 0) {
+      p.punch = 1; p.punchCd = 0.50;
+      p.punchPending = true;
+      p.stamina = Math.max(0, p.stamina - 0.06);
+      global.SFX.punch();
+    }
+    input.hit = false;
+    if (p.punchPending && p.punch < 0.55) { p.punchPending = false; resolvePunch(); }
+
     p.speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
     if (p.speed > 0.25) {
       var want = Math.atan2(p.vx, p.vz);
@@ -852,22 +921,79 @@
     p.char.root.position.set(p.x, p.y, p.z);
     p.char.root.rotation.y = p.yaw;
     global.CHAR.update(p.char, dt, {
-      speed: p.speed, airborne: !p.onGround,
+      speed: p.speed, airborne: !p.onGround, punch: p.punch,
       scared: S.alertLevel > 0.5,
       headYaw: Math.max(-0.6, Math.min(0.6, (cam.yaw - p.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI)) * 0.5
     });
     p.cell = cellOf(p.x, p.z);
   }
 
+  // кого достаём кулаком: сектор перед игроком
+  function resolvePunch() {
+    var p = S.player, D = DIFF[S.level.diff];
+    var fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+    var hit = false;
+    for (var i = 0; i < S.cops.length; i++) {
+      var c = S.cops[i];
+      if (c.stun > 0) continue;
+      var dx = c.x - p.x, dz = c.z - p.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d > 2.1) continue;
+      if (d > 0.05 && (dx / d * fx + dz / d * fz) < 0.30) continue;   // бьём только вперёд
+      c.stun = D.stun;
+      c.alert = 0; c.grab = 0; c.lastKnown = null;
+      c.path = []; c.pathIdx = 0; c.repathTimer = 0.5;
+      var ux = d > 0.05 ? dx / d : fx, uz = d > 0.05 ? dz / d : fz;
+      c.kbx = ux * 3.4; c.kbz = uz * 3.4;
+      hit = true;
+    }
+    if (hit) {
+      global.SFX.hit();
+      cam.shake = 1.2;
+      toast('ВЫРУБИЛ!');
+    }
+    return hit;
+  }
+
   // ------------------------------------------------------------------
   //  Менты
   // ------------------------------------------------------------------
+  function distOf(c, p) { return Math.sqrt((c.x - p.x) * (c.x - p.x) + (c.z - p.z) * (c.z - p.z)); }
+
   function updateCops(dt) {
     var L = S.level, D = DIFF[L.diff], p = S.player, BASE = global.WORLD.BASE;
     var anySeen = false;
     for (var i = 0; i < S.cops.length; i++) {
       var c = S.cops[i];
       c.cell = cellOf(c.x, c.z);
+
+      // лежит после удара: не видит, не ловит, не ходит
+      if (c.stun > 0) {
+        c.stun -= dt;
+        var nx0 = c.x + c.kbx * dt, nz0 = c.z + c.kbz * dt;
+        if (!blocked(nx0, c.z, 0.34)) c.x = nx0;
+        if (!blocked(c.x, nz0, 0.34)) c.z = nz0;
+        var damp0 = Math.exp(-7 * dt);
+        c.kbx *= damp0; c.kbz *= damp0;
+        var fall = Math.min(1, (D.stun - c.stun) / 0.30);
+        if (c.stun < 0.8) fall = Math.min(fall, Math.max(0, c.stun / 0.8));
+        c.down = fall;
+        c.speed = 0;
+        var vis0 = c.char.root.visible;
+        if (!vis0) c.char.root.visible = true;
+        c.char.root.position.set(c.x, c.y + 0.10 * fall, c.z);
+        c.char.root.rotation.set(-1.30 * fall, c.yaw, 0);
+        global.CHAR.setDetail(c.char, distOf(c, p) < 11);
+        global.CHAR.update(c.char, dt, { speed: 0, down: fall });
+        if (c.stun <= 0) {
+          c.stun = 0; c.down = 0; c.kbx = 0; c.kbz = 0;
+          c.char.root.rotation.set(0, c.yaw, 0);
+          c.repathTimer = 0;
+          global.SFX.getup();
+        }
+        continue;
+      }
+      c.char.root.rotation.x = 0;
       var dxp = p.x - c.x, dzp = p.z - c.z;
       var distP = Math.sqrt(dxp * dxp + dzp * dzp);
       var cellDist = Math.abs(c.cell[0] - p.cell[0]) + Math.abs(c.cell[1] - p.cell[1]);
@@ -941,10 +1067,11 @@
         global.CHAR.update(c.char, dt, { speed: c.speed, angry: c.alert > 0.5 });
       }
 
-      // поимка
-      if (distP < 0.85 && S.startGrace <= 0 && S.screen === 'game') {
-        endGame(false);
-      }
+      // поимка: мент должен продержаться рядом мгновение — есть шанс ударить
+      if (distP < 0.78 && S.startGrace <= 0 && S.screen === 'game') {
+        c.grab += dt;
+        if (c.grab > 0.26) endGame(false);
+      } else c.grab = 0;
     }
     S.seenAny = anySeen;
     var targetAlert = anySeen ? 1 : 0;
@@ -1192,6 +1319,7 @@
     $('hudTime').textContent = fmtTime(S.time);
     $('hudCoins').textContent = S.coinsGot + '/' + S.coins.length;
     $('stamina').firstElementChild.style.width = Math.round(S.player.stamina * 100) + '%';
+    $('btnHit').classList.toggle('cool', S.player.punchCd > 0.02);
     $('alert').style.opacity = S.alertLevel * 0.85;
     $('alertTxt').style.opacity = S.alertLevel > 0.4 ? 1 : 0;
     if (toastTimer > 0) {
