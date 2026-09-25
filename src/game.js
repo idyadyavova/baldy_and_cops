@@ -43,7 +43,15 @@
     depthMatObj: null, blockMat: null, folMat: null, lanternLights: []
   };
 
-  var cam = { yaw: 0.6, pitch: 0.12, dist: 5.0, curDist: 5.0, minDist: 1.35, pos: new THREE.Vector3(), shake: 0 };
+  var cam = { yaw: 0.6, pitch: 0.12, dist: 5.0, curDist: 5.0, minDist: 1.25,
+              curHeight: 1.6, follow: new THREE.Vector3(), lookY: 1.28, ready: false,
+              pos: new THREE.Vector3(), shake: 0 };
+
+  // экспоненциальное сглаживание: результат не зависит от частоты кадров,
+  // именно из-за обычного lerp*dt камеру и дёргало на просадках
+  function damp(cur, target, lambda, dt) {
+    return target + (cur - target) * Math.exp(-lambda * dt);
+  }
   var input = {
     mx: 0, my: 0, run: false, jump: false,
     stickId: null, stickX: 0, stickY: 0, stickCX: 0, stickCY: 0,
@@ -71,6 +79,8 @@
   // ------------------------------------------------------------------
   function boot() {
     loadCfg();
+    S.touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+    document.body.classList.toggle('desktop', !S.touch);
     if (!window.THREE) {
       $('loadTxt').innerHTML = 'Не загрузилась библиотека three.js.<br>Проверь интернет и обнови страницу.';
       return;
@@ -541,15 +551,32 @@
     cv.addEventListener('touchmove', function (e) { e.preventDefault(); lookMove(e); }, { passive: false });
     cv.addEventListener('touchend', lookEnd);
     cv.addEventListener('touchcancel', lookEnd);
+    // ---- мышь: захват курсора на десктопе, перетаскивание как запасной путь ----
     var dragging = false, lx = 0, ly = 0;
-    cv.addEventListener('mousedown', function (e) { dragging = true; lx = e.clientX; ly = e.clientY; global.SFX.resume(); });
+    cv.addEventListener('mousedown', function (e) {
+      global.SFX.resume();
+      if (S.screen === 'game' && !S.paused && !S.touch) { lockPointer(); return; }
+      dragging = true; lx = e.clientX; ly = e.clientY;
+    });
     window.addEventListener('mouseup', function () { dragging = false; });
     window.addEventListener('mousemove', function (e) {
+      if (isLocked()) {
+        var mx = e.movementX || 0, my = e.movementY || 0;
+        // страховка от «телепортов» курсора при переключении окна
+        if (Math.abs(mx) > 200) mx = 0;
+        if (Math.abs(my) > 200) my = 0;
+        cam.yaw -= mx * 0.0024;
+        cam.pitch = Math.max(-0.45, Math.min(0.85, cam.pitch + my * 0.0019));
+        return;
+      }
       if (!dragging) return;
       cam.yaw -= (e.clientX - lx) * 0.005;
       cam.pitch = Math.max(-0.45, Math.min(0.85, cam.pitch + (e.clientY - ly) * 0.004));
       lx = e.clientX; ly = e.clientY;
     });
+    document.addEventListener('pointerlockchange', onLockChange);
+    document.addEventListener('mozpointerlockchange', onLockChange);
+    document.addEventListener('webkitpointerlockchange', onLockChange);
 
     // кнопки действий
     function hold(el, on, off) {
@@ -601,6 +628,32 @@
   // ------------------------------------------------------------------
   //  Ход игры
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  //  Захват курсора (десктоп)
+  // ------------------------------------------------------------------
+  function isLocked() {
+    var cv = $('gl');
+    return document.pointerLockElement === cv ||
+           document.mozPointerLockElement === cv ||
+           document.webkitPointerLockElement === cv;
+  }
+  function lockPointer() {
+    if (S.touch) return;
+    var cv = $('gl');
+    var req = cv.requestPointerLock || cv.mozRequestPointerLock || cv.webkitRequestPointerLock;
+    if (req) { try { req.call(cv); } catch (e) { } }
+  }
+  function unlockPointer() {
+    var ex = document.exitPointerLock || document.mozExitPointerLock || document.webkitExitPointerLock;
+    if (ex && isLocked()) { try { ex.call(document); } catch (e) { } }
+  }
+  function onLockChange() {
+    var l = isLocked();
+    document.body.classList.toggle('locked', l);
+    // Esc снимает захват — это же и есть пауза
+    if (!l && S.screen === 'game' && !S.paused) pause(true);
+  }
+
   function goFullscreen() {
     var el = document.documentElement;
     try {
@@ -617,7 +670,9 @@
     S.startGrace = 3.0; S.alertLevel = 0; S.seenAny = false;
     S.coins.forEach(function (c) { c.taken = false; });
     if (S.coinMesh) S.coinMesh.count = S.coins.length;
-    cam.pitch = 0.12; cam.curDist = cam.dist;
+    cam.pitch = 0.12; cam.curDist = cam.dist; cam.ready = false;
+    if (S.player) S.player.char.root.visible = true;
+    S.fpMode = false;
     (function () {
       // ищем направление, где и впереди свободно, и сзади есть место для камеры
       var pc = S.player.cell;
@@ -640,10 +695,12 @@
     S.screen = 'game';
     show('hud');
     global.SFX.init(); global.SFX.resume(); global.SFX.ambient(true);
+    lockPointer();
     toast('НАЙДИ ВЫХОД!');
   }
   function toMenu() {
     S.screen = 'menu'; S.paused = false;
+    unlockPointer();
     if (S.player) { S.player.char.root.visible = true; S.fpMode = false; }
     global.SFX.siren(false); global.SFX.ambient(false);
     updateMenuTexts();
@@ -657,7 +714,8 @@
   function pause(on) {
     S.paused = on;
     show(on ? 'pausePanel' : 'hud');
-    if (on) global.SFX.siren(false);
+    if (on) { global.SFX.siren(false); unlockPointer(); }
+    else lockPointer();
   }
   var toastTimer = 0;
   function toast(txt) {
@@ -671,6 +729,7 @@
     S.alive = !win ? false : true;
     S.won = win;
     S.screen = 'end';
+    unlockPointer();
     global.SFX.siren(false); global.SFX.ambient(false);
     if (win) global.SFX.win(); else global.SFX.lose();
     $('endTitle').textContent = win ? 'ПОБЕДА!' : 'ПОЙМАЛИ!';
@@ -709,8 +768,8 @@
     var maxSpeed = run ? 5.6 : 3.35;
     var accel = p.onGround ? 24 : 9;
     var tx = dirX * maxSpeed, tz = dirZ * maxSpeed;
-    p.vx += (tx - p.vx) * Math.min(1, accel * dt);
-    p.vz += (tz - p.vz) * Math.min(1, accel * dt);
+    p.vx = damp(p.vx, tx, accel, dt);
+    p.vz = damp(p.vz, tz, accel, dt);
 
     var r = 0.34;
     var nx = p.x + p.vx * dt;
@@ -734,7 +793,7 @@
     if (p.speed > 0.25) {
       var want = Math.atan2(p.vx, p.vz);
       var d = ((want - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      p.yaw += d * Math.min(1, 12 * dt);
+      p.yaw += d * (1 - Math.exp(-14 * dt));
     }
 
     // выносливость
@@ -824,7 +883,7 @@
           if (!blocked(c.x, nz, r)) c.z = nz;
           var want = Math.atan2(vx, vz);
           var da = ((want - c.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-          c.yaw += da * Math.min(1, 9 * dt);
+          c.yaw += da * (1 - Math.exp(-10 * dt));
           c.speed = speed;
         }
       } else c.speed = Math.max(0, c.speed - dt * 4);
@@ -856,47 +915,48 @@
   var _desired = new THREE.Vector3(), _look = new THREE.Vector3();
   function updateCamera(dt) {
     var p = S.player, eng = S.eng;
+    if (!cam.ready) {
+      cam.follow.set(p.x, p.y, p.z);
+      cam.curDist = cam.dist; cam.curHeight = 1.6; cam.lookY = p.y + 1.28;
+      cam.ready = true;
+    }
+
+    // точка слежения плавно догоняет игрока — гасит мелкую дрожь шага
+    var f = cam.follow;
+    f.x = damp(f.x, p.x, 18, dt);
+    f.y = damp(f.y, p.y, 11, dt);
+    f.z = damp(f.z, p.z, 18, dt);
+
     var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-    var pitch = cam.pitch;
+    var pitch = cam.pitch, cosP = Math.cos(pitch);
 
-    // подбираем дистанцию так, чтобы камера не влезала в стену
-    var maxD = cam.dist;
-    for (var t = 0.7; t <= cam.dist; t += 0.22) {
-      var qx = p.x - sy * Math.cos(pitch) * t, qz = p.z - cy * Math.cos(pitch) * t;
-      if (blocked(qx, qz, 0.32)) { maxD = Math.max(cam.minDist, t - 0.42); break; }
+    // дистанция, на которой камера ещё не в стене
+    var wanted = cam.dist;
+    for (var t = 0.55; t <= cam.dist; t += 0.16) {
+      var qx = f.x - sy * cosP * t, qz = f.z - cy * cosP * t;
+      if (blocked(qx, qz, 0.30)) { wanted = Math.max(cam.minDist, t - 0.38); break; }
     }
-    cam.curDist += (maxD - cam.curDist) * Math.min(1, dt * (maxD < cam.curDist ? 18 : 3.5));
+    // подъезжаем к игроку быстро, отъезжаем медленно — на углах не швыряет
+    cam.curDist = damp(cam.curDist, wanted, wanted < cam.curDist ? 16 : 2.6, dt);
+
     var squeeze = 1 - Math.min(1, (cam.curDist - cam.minDist) / Math.max(0.001, cam.dist - cam.minDist));
+    // в тесноте камера поднимается над игроком вместо прыжков в вид от первого лица
+    var wantH = Math.min(2.5, 1.50 + Math.sin(pitch) * 2.2 + squeeze * 0.95);
+    cam.curHeight = damp(cam.curHeight, wantH, 7, dt);
 
-    // высота: не выше верха стен, иначе камера окажется внутри блока
-    var height = Math.min(2.35, 1.50 + Math.sin(pitch) * 2.2 + squeeze * 0.12);
-    var back = Math.cos(pitch) * cam.curDist;
-    var px = p.x - sy * back, pz = p.z - cy * back;
+    var back = cosP * cam.curDist;
+    eng.camera.position.set(f.x - sy * back, f.y + cam.curHeight, f.z - cy * back);
 
-    // если и на минимальной дистанции упираемся в стену — уходим от первого лица
-    var fpNow = blocked(px, pz, 0.26);
-    var fp = S.fpMode ? (fpNow || cam.curDist < 1.8) : fpNow;   // гистерезис, чтобы не мигало
-    if (fp) {
-      px = p.x + sy * 0.12; pz = p.z + cy * 0.12;
-      height = 1.60;
-    }
-    if (S.fpMode !== fp) {
-      S.fpMode = fp;
-      p.char.root.visible = !fp;
-    }
-    _desired.set(px, p.y + height, pz);
-    eng.camera.position.lerp(_desired, Math.min(1, dt * 15));
     if (cam.shake > 0) {
       eng.camera.position.x += (Math.random() - 0.5) * cam.shake * 0.1;
       eng.camera.position.y += (Math.random() - 0.5) * cam.shake * 0.1;
       cam.shake = Math.max(0, cam.shake - dt * 2);
     }
-    if (fp) {
-      _look.set(p.x + sy * 6, p.y + 1.60 - Math.sin(pitch) * 4.5, p.z + cy * 6);
-    } else {
-      // при отрицательном наклоне смотрим выше — чтобы было видно небо и солнце
-      _look.set(p.x, p.y + 1.28 - Math.min(0, pitch) * 3.0 - squeeze * 0.18, p.z);
-    }
+
+    // при взгляде вверх цель поднимается — видно небо
+    var wantLookY = p.y + 1.28 - Math.min(0, pitch) * 3.0 + squeeze * 0.30;
+    cam.lookY = damp(cam.lookY, wantLookY, 9, dt);
+    _look.set(f.x, cam.lookY, f.z);
     eng.camera.lookAt(_look);
     eng.shadowTarget.set(p.x, p.y, p.z);
   }
@@ -1129,6 +1189,7 @@
       updatePlayer(dt);
       updateCops(dt);
       updateCoins(dt);
+      updateCamera(dt);
       var dxe = S.player.x - S.level.exit.x, dze = S.player.z - S.level.exit.z;
       if (dxe * dxe + dze * dze < 1.6 && !S.noWin) endGame(true);
     }

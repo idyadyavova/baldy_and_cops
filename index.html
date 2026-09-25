@@ -110,6 +110,15 @@
   .big{font-size:30px;font-weight:900;text-align:center;margin-bottom:6px}
   .stat{display:flex;justify-content:space-between;padding:9px 12px;border-radius:12px;background:rgba(255,255,255,.05);margin-bottom:8px;font-size:15px}
   .stat b{color:var(--gold)}
+  body.desktop #stick, body.desktop #btnJump, body.desktop #btnRun{display:none}
+  body.locked{cursor:none}
+  #mouseHint{position:absolute;left:0;right:0;bottom:calc(30px + var(--safe-b));text-align:center;
+    font-size:13px;color:#c3cbdb;text-shadow:0 2px 8px #000;display:none;padding:0 16px;line-height:1.5}
+  body.desktop #mouseHint{display:block}
+  body.locked #mouseHint{display:none}
+  #crosshair{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+    background:rgba(255,255,255,.5);box-shadow:0 0 6px rgba(0,0,0,.85);display:none}
+  body.locked #crosshair{display:block}
   #fps{position:absolute;left:calc(10px + var(--safe-l));bottom:calc(178px + var(--safe-b));font-size:11px;color:var(--dim);
     background:rgba(0,0,0,.35);padding:3px 7px;border-radius:8px;display:none}
 </style>
@@ -181,7 +190,8 @@
     <div class="stat"><span>Золотые монеты</span><b>очки</b></div>
     <div class="stat"><span>Зелёный портал</span><b>выход</b></div>
     <div class="hint">Менты ищут тебя по лабиринту. Если увидят — побегут напрямую.<br>
-      На клавиатуре: WASD, Shift — бег, Пробел — прыжок, Esc — пауза.</div>
+      На компьютере: клик по экрану захватывает мышь, и камера крутится без зажатой кнопки.<br>
+      WASD — идти, Shift — бег, Пробел — прыжок, Esc — пауза и снять захват.</div>
     <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
   </div>
 </div>
@@ -203,6 +213,8 @@
   <div id="alert"></div>
   <div id="alertTxt">ТЕБЯ ЗАМЕТИЛИ!</div>
   <div id="toast"></div>
+  <div id="crosshair"></div>
+  <div id="mouseHint">Клик по экрану — захват мыши · WASD — идти · Shift — бег · Пробел — прыжок · Esc — пауза</div>
   <div id="fps">0 fps</div>
 </div>
 
