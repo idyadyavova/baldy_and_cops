@@ -38,8 +38,10 @@
   var DIFF = {
     1: { map: '1', name: 'Простой', cops: 2, copSpeed: 2.10, vision: 10, repath: 1.5, stun: 7.0, coins: 8, sun: 0.32, azim: 0.85, cloud: 0.56 },
     2: { map: '2', name: 'Средний', cops: 3, copSpeed: 2.50, vision: 12, repath: 1.1, stun: 6.0, coins: 12, sun: 0.085, azim: 2.35, cloud: 0.47 },
-    3: { map: '3', name: 'Сложный', cops: 5, copSpeed: 2.72, vision: 14, repath: 0.8, stun: 5.0, coins: 16, sun: -0.40, azim: 1.6, cloud: 0.64 }
+    3: { map: '3', name: 'Сложный', cops: 5, copSpeed: 2.72, vision: 14, repath: 0.8, stun: 5.0, coins: 16, sun: -0.40, azim: 1.6, cloud: 0.64 },
+    4: { parkour: true, name: 'Паркур', cops: 3, copSpeed: 2.35, vision: 13, repath: 1.2, stun: 6.0, coins: 14, sun: 0.52, azim: 1.15, cloud: 0.58 }
   };
+  var DIFF_COUNT = 4;
 
   // ------------------------------------------------------------------
   //  Состояние
@@ -223,12 +225,13 @@
     S.lanternLights.length = 0;
 
     var D = DIFF[diff];
-    var map = global.MAPS[D.map];
     var B = global.WORLD.init(global.TEX.TILES);
-    var world = global.WORLD.generate(THREE, map, 1000 + diff * 77, { wallHeight: 2 });
+    var world = D.parkour
+      ? global.WORLD.generateParkour(THREE, 5100 + diff)
+      : global.WORLD.generate(THREE, global.MAPS[D.map], 1000 + diff * 77, { wallHeight: 2 });
     var mesh = global.WORLD.buildMesh(THREE, world.vol, B, true);
     global.WORLD.addGrassTufts(mesh.foliage, world, global.TEX.TILES, eng.Q.grass);
-    global.WORLD.addWallVines(mesh.foliage, world, global.TEX.TILES, Math.min(0.5, eng.Q.grass * 0.42));
+    if (!world.parkour) global.WORLD.addWallVines(mesh.foliage, world, global.TEX.TILES, Math.min(0.5, eng.Q.grass * 0.42));
 
     if (!S.blockMat) {
       S.blockMat = global.MAT.makeBlockMaterial(THREE, eng.common, S.tex);
@@ -264,9 +267,10 @@
 
     // выход
     var exitCell = world.exitCell || [world.cells.w - 2, world.cells.h - 2];
-    var ex = cellToWorld(exitCell[0], exitCell[1]);
+    var ex = world.exitPos || cellToWorld(exitCell[0], exitCell[1]);
+    var exitY = world.exitPos ? world.exitPos.y : BASE + 1;
     var exitObj = global.PROPS.makeExit(THREE, eng.common, S.depthMatObj);
-    exitObj.group.position.set(ex.x, BASE + 1, ex.z);
+    exitObj.group.position.set(ex.x, exitY, ex.z);
     // разворачиваем портал к открытой стороне
     var openDir = 0;
     var dirs = [[0, -1, 0], [1, 0, Math.PI / 2], [0, 1, Math.PI], [-1, 0, -Math.PI / 2]];
@@ -274,6 +278,7 @@
       var cc = exitCell[0] + dirs[di][0], rr = exitCell[1] + dirs[di][1];
       if (rr >= 0 && rr < world.cells.h && cc >= 0 && cc < world.cells.w && !world.wallGrid[rr][cc]) { openDir = dirs[di][2]; break; }
     }
+    if (world.parkour) openDir = Math.atan2(world.startPos.x - ex.x, world.startPos.z - ex.z);
     exitObj.group.rotation.y = openDir;
     eng.scene.add(exitObj.group); objects.push(exitObj.group);
 
@@ -294,10 +299,18 @@
       if (cc2[0] === exitCell[0] && cc2[1] === exitCell[1]) continue;
       coinCells.push(cc2);
     }
-    S.coins = coinCells.map(function (c) {
-      var w = cellToWorld(c[0], c[1]);
-      return { x: w.x, y: BASE + 1.55, z: w.z, taken: false, spin: Math.random() * 6.28 };
-    });
+    if (world.parkour) {
+      S.coins = [];
+      for (var pi = 1; pi < world.platforms.length - 1 && S.coins.length < D.coins; pi += 2) {
+        var pl2 = world.platforms[pi];
+        S.coins.push({ x: pl2.x, y: pl2.y + 1.05, z: pl2.z, taken: false, spin: Math.random() * 6.28 });
+      }
+    } else {
+      S.coins = coinCells.map(function (c) {
+        var w = cellToWorld(c[0], c[1]);
+        return { x: w.x, y: BASE + 1.55, z: w.z, taken: false, spin: Math.random() * 6.28 };
+      });
+    }
     var coinObj = global.PROPS.makeCoins(THREE, eng.common, S.coins, S.depthMatObj);
     eng.scene.add(coinObj.mesh); objects.push(coinObj.mesh);
     S.coinMesh = coinObj.mesh;
@@ -305,7 +318,7 @@
     // фонари: один инстансовый меш на весь лабиринт
     var lanterns = [];
     var step = 5;
-    for (var lr = 1; lr < world.cells.h - 1; lr += step) {
+    if (!world.parkour) for (var lr = 1; lr < world.cells.h - 1; lr += step) {
       for (var lc = 1; lc < world.cells.w - 1; lc += step) {
         if (world.wallGrid[lr][lc]) continue;
         var lw = cellToWorld(lc, lr);
@@ -330,8 +343,16 @@
       eng.scene.add(motes.points); objects.push(motes.points);
     }
 
+    var platCells = null;
+    if (world.parkour) {
+      platCells = {};
+      world.platforms.forEach(function (pl) {
+        platCells[Math.floor(pl.x / CELL) + ',' + Math.floor(pl.z / CELL)] = 1;
+      });
+    }
+
     S.level = {
-      world: world, objects: objects, motes: motes, water: water, exit: { x: ex.x, z: ex.z, cell: exitCell, obj: exitObj },
+      world: world, objects: objects, motes: motes, water: water, platCells: platCells, exit: { x: ex.x, y: exitY, z: ex.z, cell: exitCell, obj: exitObj },
       cellToWorld: cellToWorld, lanterns: lanterns, diff: diff,
       explored: new Uint8Array(world.cells.w * world.cells.h)
     };
@@ -354,12 +375,14 @@
     S.cops = [];
 
     var pc = world.playerCell || [1, 1];
-    var pw = L.cellToWorld(pc[0], pc[1]);
+    var pw = world.startPos || L.cellToWorld(pc[0], pc[1]);
+    var py0 = world.startPos ? world.startPos.y : BASE + 1;
     var pchar = global.CHAR.build(THREE, eng.common, CFG.skin, false, S.depthMatObj);
     pchar.root.rotation.order = 'YXZ';
     eng.scene.add(pchar.root);
     S.player = {
-      char: pchar, x: pw.x, z: pw.z, y: BASE + 1, vy: 0, vx: 0, vz: 0,
+      char: pchar, x: pw.x, z: pw.z, y: py0, vy: 0, vx: 0, vz: 0,
+      cp: { x: pw.x, y: py0, z: pw.z }, coyote: 0.13, jumpBuf: 0,
       yaw: 0, onGround: true, stamina: 1, speed: 0, stepTimer: 0, cell: pc.slice(),
       punch: 0, punchCd: 0, punchPending: false
     };
@@ -383,10 +406,13 @@
       var w = L.cellToWorld(sc[0], sc[1]);
       var cchar = global.CHAR.build(THREE, eng.common, 0, true, S.depthMatObj);
       cchar.root.rotation.order = 'YXZ';   // сначала разворот, потом падение назад
-      cchar.root.position.set(w.x, BASE + 1, w.z);
+      var cy0 = world.height ? world.height[
+        Math.max(0, Math.min(world.sz - 1, Math.round(w.z))) * world.sx +
+        Math.max(0, Math.min(world.sx - 1, Math.round(w.x)))] + 1 : BASE + 1;
+      cchar.root.position.set(w.x, cy0, w.z);
       eng.scene.add(cchar.root);
       S.cops.push({
-        char: cchar, x: w.x, z: w.z, y: BASE + 1, yaw: 0, speed: 0,
+        char: cchar, x: w.x, z: w.z, y: cy0, yaw: 0, speed: 0,
         path: [], pathIdx: 0, repathTimer: rnd() * 0.5, state: 'patrol',
         target: null, lastKnown: null, alert: 0, whistle: 0, cell: sc.slice(),
         stun: 0, down: 0, kbx: 0, kbz: 0, grab: 0
@@ -397,16 +423,46 @@
   // ------------------------------------------------------------------
   //  Геометрия мира: столкновения и клетки
   // ------------------------------------------------------------------
-  function solidAt(x, z) {
+  var PH = 1.75;                  // рост игрока
+  var FOLIAGE = null;             // id блоков, сквозь которые можно проходить
+
+  function voxelSolid(bx, by, bz) {
     var L = S.level; if (!L) return false;
     var w = L.world;
-    var bx = Math.floor(x), bz = Math.floor(z);
+    if (by < 0) return true;
     if (bx < 0 || bz < 0 || bx >= w.sx || bz >= w.sz) return true;
-    return w.vol.get(bx, global.WORLD.BASE + 1, bz) !== 0;
+    if (by >= w.sy) return false;
+    var v = w.vol.get(bx, by, bz);
+    if (v === 0) return false;
+    if (v === 255) return true;
+    if (!FOLIAGE) {
+      FOLIAGE = {};
+      var B = global.WORLD.blocks();
+      for (var k in B) if (B[k].foliage) FOLIAGE[B[k].id] = 1;   // листва не мешает
+    }
+    return !FOLIAGE[v];
   }
-  function blocked(x, z, r) {
-    return solidAt(x - r, z - r) || solidAt(x + r, z - r) || solidAt(x - r, z + r) || solidAt(x + r, z + r);
+
+  // объёмная проверка: коробка игрока/мента от ног до макушки
+  function boxBlocked(x, y, z, r, h) {
+    var y0 = Math.floor(y + 0.06), y1 = Math.floor(y + h - 0.06);
+    var x0 = Math.floor(x - r), x1 = Math.floor(x + r);
+    var z0 = Math.floor(z - r), z1 = Math.floor(z + r);
+    for (var by = y0; by <= y1; by++)
+      for (var bx = x0; bx <= x1; bx++)
+        for (var bz = z0; bz <= z1; bz++)
+          if (voxelSolid(bx, by, bz)) return true;
+    return false;
   }
+
+  // верх ближайшей опоры под точкой
+  function groundTop(x, z, fromY) {
+    var bx = Math.floor(x), bz = Math.floor(z);
+    var start = Math.floor(fromY);
+    for (var by = start; by >= 0; by--) if (voxelSolid(bx, by, bz)) return by + 1;
+    return 0;
+  }
+
   function cellOf(x, z) {
     var L = S.level, CELL = global.WORLD.CELL;
     return [Math.floor((x - L.world.mazeX0) / CELL), Math.floor((z - L.world.mazeZ0) / CELL)];
@@ -501,7 +557,7 @@
     $('btnHelp').onclick = function () { show('helpPanel'); };
     $('helpOk').onclick = closePanel;
     $('btnDiff').onclick = function () {
-      CFG.difficulty = CFG.difficulty % 3 + 1; saveCfg(); updateMenuTexts();
+      CFG.difficulty = CFG.difficulty % DIFF_COUNT + 1; saveCfg(); updateMenuTexts();
       buildLevel(CFG.difficulty);
     };
     $('btnPause').onclick = function () { pause(true); };
@@ -893,22 +949,56 @@
     // радиус меньше, чем был, и вместо отскока — скольжение вдоль стены
     var r = 0.27;
     var nx = p.x + p.vx * dt;
-    if (!blocked(nx, p.z, r)) p.x = nx;
-    else p.vx = 0;
-    var nz = p.z + p.vz * dt;
-    if (!blocked(p.x, nz, r)) p.z = nz; else p.vz = 0;
-
-    // прыжок и гравитация
-    var groundY = BASE + 1;
-    if (input.jump && p.onGround) {
-      p.vy = 6.0; p.onGround = false; global.SFX.jump();
+    if (!boxBlocked(nx, p.y, p.z, r, PH)) p.x = nx;
+    else {
+      // мягкий шаг на блок высотой в полкирпича, чтобы не цепляться за края
+      if (!boxBlocked(nx, p.y + 0.55, p.z, r, PH - 0.55) && p.onGround &&
+          !boxBlocked(nx, p.y + 0.62, p.z, r, 0.2)) { p.x = nx; p.y += 0.55; }
+      else p.vx = 0;
     }
+    var nz = p.z + p.vz * dt;
+    if (!boxBlocked(p.x, p.y, nz, r, PH)) p.z = nz;
+    else {
+      if (!boxBlocked(p.x, p.y + 0.55, nz, r, PH - 0.55) && p.onGround &&
+          !boxBlocked(p.x, p.y + 0.62, nz, r, 0.2)) { p.z = nz; p.y += 0.55; }
+      else p.vz = 0;
+    }
+
+    // ---- прыжок и гравитация по объёму ----
+    p.jumpBuf = input.jump ? 0.16 : Math.max(0, (p.jumpBuf || 0) - dt);
     input.jump = false;
-    if (!p.onGround) {
-      p.vy -= 19.5 * dt;
-      p.y += p.vy * dt;
-      if (p.y <= groundY) { p.y = groundY; p.vy = 0; p.onGround = true; global.SFX.land(); }
-    } else p.y = groundY;
+    if (p.jumpBuf > 0 && (p.coyote || 0) > 0) {
+      p.vy = 7.2; p.onGround = false; p.coyote = 0; p.jumpBuf = 0;
+      global.SFX.jump();
+    }
+    p.vy -= 20.5 * dt;
+    if (p.vy < -32) p.vy = -32;
+    var ny = p.y + p.vy * dt;
+    var landed = false;
+    if (p.vy > 0) {
+      if (boxBlocked(p.x, ny, p.z, r, PH)) p.vy = 0;   // приложился головой
+      else p.y = ny;
+    } else {
+      if (boxBlocked(p.x, ny, p.z, r, PH)) {
+        p.y = Math.floor(ny + 0.06) + 1;
+        if (p.vy < -5) landed = true;
+        p.vy = 0;
+      } else p.y = ny;
+    }
+    p.onGround = boxBlocked(p.x, p.y - 0.09, p.z, r, 0.07);
+    if (p.onGround) { if (p.vy < 0) p.vy = 0; p.coyote = 0.13; }
+    else p.coyote = Math.max(0, (p.coyote || 0) - dt);
+    if (landed) global.SFX.land();
+
+    // паркур: отметки и срыв вниз
+    if (S.level.world.parkour) {
+      if (p.onGround && p.y >= BASE + 1.6) {
+        p.cp = { x: p.x, y: p.y, z: p.z };
+      }
+      var fell = p.y < global.WORLD.WATER + 0.6 ||
+                 (p.onGround && p.cp && p.y < p.cp.y - 2.4);
+      if (fell && S.screen === 'game') respawnAtCheckpoint();
+    }
 
     // ---- удар: замах, попадание в середине, откат ----
     p.punch = Math.max(0, p.punch - dt / 0.34);
@@ -947,6 +1037,19 @@
       headYaw: Math.max(-0.6, Math.min(0.6, (cam.yaw - p.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI)) * 0.5
     });
     p.cell = cellOf(p.x, p.z);
+  }
+
+  // сорвался с трассы — возвращаем на последнюю платформу
+  function respawnAtCheckpoint() {
+    var p = S.player;
+    var cp = p.cp || S.level.world.startPos || { x: p.x, y: global.WORLD.BASE + 1, z: p.z };
+    p.x = cp.x; p.y = cp.y; p.z = cp.z;
+    p.vx = 0; p.vz = 0; p.vy = 0;
+    p.onGround = true; p.coyote = 0.13; p.jumpBuf = 0;
+    cam.ready = false;
+    cam.shake = 0.6;
+    global.SFX.land();
+    toast('СОРВАЛСЯ!');
   }
 
   // кого достаём кулаком: сектор перед игроком
@@ -992,8 +1095,8 @@
       if (c.stun > 0) {
         c.stun -= dt;
         var nx0 = c.x + c.kbx * dt, nz0 = c.z + c.kbz * dt;
-        if (!blocked(nx0, c.z, 0.34)) c.x = nx0;
-        if (!blocked(c.x, nz0, 0.34)) c.z = nz0;
+        if (!boxBlocked(nx0, c.y, c.z, 0.34, 1.7)) c.x = nx0;
+        if (!boxBlocked(c.x, c.y, nz0, 0.34, 1.7)) c.z = nz0;
         var damp0 = Math.exp(-7 * dt);
         c.kbx *= damp0; c.kbz *= damp0;
         var fall = Math.min(1, (D.stun - c.stun) / 0.30);
@@ -1069,8 +1172,9 @@
           var vx = dx / d * speed, vz = dz / d * speed;
           var r = 0.34;
           var nx = c.x + vx * dt, nz = c.z + vz * dt;
-          if (!blocked(nx, c.z, r)) c.x = nx;
-          if (!blocked(c.x, nz, r)) c.z = nz;
+          if (!boxBlocked(nx, c.y, c.z, r, 1.7)) c.x = nx;
+          if (!boxBlocked(c.x, c.y, nz, r, 1.7)) c.z = nz;
+          c.y = groundTop(c.x, c.z, c.y + 1.3);
           var want = Math.atan2(vx, vz);
           var da = ((want - c.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
           c.yaw += da * (1 - Math.exp(-10 * dt));
@@ -1123,8 +1227,8 @@
     S.catchT += dt;
     var r = 0.27;
     var nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
-    if (!blocked(nx, p.z, r)) p.x = nx;
-    if (!blocked(p.x, nz, r)) p.z = nz;
+    if (!boxBlocked(nx, p.y, p.z, r, PH)) p.x = nx;
+    if (!boxBlocked(p.x, p.y, nz, r, PH)) p.z = nz;
     var k = Math.exp(-5 * dt);
     p.vx *= k; p.vz *= k;
     var elapsed = (performance.now() - S.catchStart) / 1000;
@@ -1202,7 +1306,9 @@
     var wanted = cam.dist;
     for (var t = 0.55; t <= cam.dist; t += 0.16) {
       var qx = f.x - sign * sy * cosP * t, qz = f.z - sign * cy * cosP * t;
-      if (blocked(qx, qz, 0.30)) { wanted = Math.max(cam.minDist, t - 0.38); break; }
+      if (boxBlocked(qx, f.y + cam.curHeight - 0.2, qz, 0.28, 0.42)) {
+        wanted = Math.max(cam.minDist, t - 0.38); break;
+      }
     }
     // подъезжаем к игроку быстро, отъезжаем медленно — на углах не швыряет
     cam.curDist = damp(cam.curDist, wanted, wanted < cam.curDist ? 16 : 2.6, dt);
@@ -1350,7 +1456,8 @@
         var x = (c + R) * cs, y = (r + R) * cs;
         var d = Math.sqrt(r * r + c * c) / R;
         g.globalAlpha = Math.max(0.15, 1 - d * 0.85);
-        g.fillStyle = L.world.wallGrid[mr][mc] ? '#1b2436' : '#7f8ea8';
+        g.fillStyle = (L.platCells && L.platCells[mc + ',' + mr]) ? '#ffb347'
+          : (L.world.wallGrid[mr][mc] ? '#1b2436' : '#7f8ea8');
         g.fillRect(x, y, cs + 0.6, cs + 0.6);
       }
     }
@@ -1435,7 +1542,8 @@
       updateHUD(dt);
       // победа
       var dxe = S.player.x - S.level.exit.x, dze = S.player.z - S.level.exit.z;
-      if (dxe * dxe + dze * dze < 1.6 && !S.noWin) endGame(true);
+      var dye = S.player.y - (S.level.exit.y || S.player.y);
+      if (dxe * dxe + dze * dze < 1.9 && Math.abs(dye) < 2.8 && !S.noWin) endGame(true);
     } else if (S.screen === 'menu') {
       updateMenuCamera(dt);
     } else if (S.screen === 'end' || S.paused) {

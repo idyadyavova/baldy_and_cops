@@ -156,7 +156,7 @@
       <button class="btn" id="btnGfx">Графика <span class="val" id="gfxVal">Высокая</span></button>
       <button class="btn" id="btnHelp">Как играть</button>
     </div>
-    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925d</div>
+    <div class="hint" style="opacity:.55;font-size:11px;letter-spacing:1px">СБОРКА 20260925e</div>
     <div class="hint" id="bestHint">Убегай от ментов и найди светящийся выход</div>
   </div>
 </div>
@@ -205,12 +205,14 @@
     <div class="stat"><span>Кнопка «ПРЫЖОК»</span><b>перепрыгнуть</b></div>
     <div class="stat"><span>Золотые монеты</span><b>очки</b></div>
     <div class="stat"><span>Зелёный портал</span><b>выход</b></div>
+    <div class="stat"><span>Сложность «Паркур»</span><b>трасса по платформам</b></div>
     <div class="stat"><span>Кнопка «УДАР»</span><b>вырубить мента</b></div>
     <div class="stat"><span>Кнопка «3‑е» сверху</span><b>сменить вид</b></div>
     <div class="hint">Менты ищут тебя по лабиринту. Если увидят — побегут напрямую.<br>
       На компьютере: клик по экрану захватывает мышь, и камера крутится без зажатой кнопки.<br>
       WASD — идти, Shift — бег, Пробел — прыжок, Esc — пауза и снять захват.<br>
       F5 или V — вид по кругу: от первого лица, от третьего, спереди.<br>
+      На паркуре срыв не проигрыш: вернёт на последнюю платформу.<br>
       Удар — левая кнопка мыши или F. Оглушённый мент падает и пропускает.</div>
     <button class="btn main" style="margin-top:12px" id="helpOk">Понятно</button>
   </div>
@@ -268,25 +270,25 @@
   </div>
 </div>
 
-<script src="lib/three.min.js?v=20260925d"></script>
+<script src="lib/three.min.js?v=20260925e"></script>
 <script>
   // запасной вариант, если локальный файл не отдался (например, хостинг его вырезал)
   if (!window.THREE) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/scr' + 'ipt>');
 </script>
-<script src="src/noise.js?v=20260925d"></script>
-<script src="src/textures.js?v=20260925d"></script>
-<script src="src/shaderlib.js?v=20260925d"></script>
-<script src="src/sky.js?v=20260925d"></script>
-<script src="src/materials.js?v=20260925d"></script>
-<script src="src/world.js?v=20260925d"></script>
-<script src="src/water.js?v=20260925d"></script>
-<script src="src/character.js?v=20260925d"></script>
-<script src="src/props.js?v=20260925d"></script>
-<script src="src/particles.js?v=20260925d"></script>
-<script src="src/post.js?v=20260925d"></script>
-<script src="src/engine.js?v=20260925d"></script>
-<script src="src/maps.js?v=20260925d"></script>
-<script src="src/audio.js?v=20260925d"></script>
-<script src="src/game.js?v=20260925d"></script>
+<script src="src/noise.js?v=20260925e"></script>
+<script src="src/textures.js?v=20260925e"></script>
+<script src="src/shaderlib.js?v=20260925e"></script>
+<script src="src/sky.js?v=20260925e"></script>
+<script src="src/materials.js?v=20260925e"></script>
+<script src="src/world.js?v=20260925e"></script>
+<script src="src/water.js?v=20260925e"></script>
+<script src="src/character.js?v=20260925e"></script>
+<script src="src/props.js?v=20260925e"></script>
+<script src="src/particles.js?v=20260925e"></script>
+<script src="src/post.js?v=20260925e"></script>
+<script src="src/engine.js?v=20260925e"></script>
+<script src="src/maps.js?v=20260925e"></script>
+<script src="src/audio.js?v=20260925e"></script>
+<script src="src/game.js?v=20260925e"></script>
 </body>
 </html>

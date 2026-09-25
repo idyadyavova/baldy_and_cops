@@ -154,7 +154,8 @@
         var top = vol.get(x, h, z);
         // на плато лабиринта трава тоже растёт (пол коридоров)
         var y = h;
-        if (x >= world.mazeX0 && x < world.mazeX0 + world.cells.w * CELL &&
+        if (!world.parkour &&
+            x >= world.mazeX0 && x < world.mazeX0 + world.cells.w * CELL &&
             z >= world.mazeZ0 && z < world.mazeZ0 + world.cells.h * CELL) {
           y = BASE; top = vol.get(x, BASE, z);
           if (vol.get(x, BASE + 1, z) !== 0) continue;
@@ -428,8 +429,179 @@
     };
   }
 
+  // ---------------------------------------------------------------
+  //  Паркур: открытый остров и трасса из платформ по спирали вверх
+  // ---------------------------------------------------------------
+  function generateParkour(THREE, seed, opts) {
+    var sx = 112, sz = 112, sy = BASE + 34;
+    var vol = new Volume(sx, sy, sz);
+    var rnd = N.mulberry32(seed);
+    var cx = sx / 2, cz = sz / 2;
+
+    // --- остров ---------------------------------------------------
+    var height = new Float32Array(sx * sz);
+    var surfBlock = new Uint8Array(sx * sz);
+    for (var z = 0; z < sz; z++) {
+      for (var x = 0; x < sx; x++) {
+        var dx = x - cx, dz = z - cz;
+        var d = Math.sqrt(dx * dx + dz * dz) / (sx * 0.46);
+        var hills = (N.fbm(x * 0.035, z * 0.035, 4096, seed + 5, 4) - 0.5) * 4.2;
+        var h = BASE + hills * (1 - N.clamp(d, 0, 1)) - N.smoothstep(0.62, 1.05, d) * (BASE + 4);
+        var hi = Math.max(0, Math.round(h));
+        height[z * sx + x] = hi;
+        var blk;
+        if (hi <= WATER + 0.9) blk = B.SAND;
+        else if (hi <= WATER + 1.7) blk = (N.vnoise(x * 0.3, z * 0.3, 4096, seed + 3) > 0.45 ? B.SAND : B.GRASS);
+        else {
+          var rocky = N.fbm(x * 0.08, z * 0.08, 4096, seed + 21, 4);
+          blk = rocky > 0.66 ? B.GRAVEL : B.GRASS;
+        }
+        surfBlock[z * sx + x] = blk.id;
+        var depth = Math.max(0, hi - 4);
+        for (var y = depth; y <= hi; y++) {
+          vol.set(x, y, z, y === hi ? blk.id : (y > hi - 3 ? (blk === B.SAND ? B.SAND.id : B.DIRT.id) : B.ROCK.id));
+        }
+        if (depth > 0) for (var y2 = 0; y2 < depth; y2++) vol.set(x, y2, z, 255);
+      }
+    }
+
+    // --- трасса ---------------------------------------------------
+    var plats = [];
+    function slab(px, py, pz, w, dd, id) {
+      var x0 = Math.round(px - w / 2), z0 = Math.round(pz - dd / 2);
+      for (var ax = 0; ax < w; ax++) for (var az = 0; az < dd; az++) {
+        vol.set(x0 + ax, py, z0 + az, id);
+      }
+      return { x: x0 + w / 2, y: py + 1, z: z0 + dd / 2, w: w, d: dd };
+    }
+
+    var MATS = [B.PLANKS.id, B.COBBLE.id, B.BRICK.id, B.ROCK.id, B.FLAG.id];
+    var px = cx + 33, pz = cz, py = BASE + 1;
+    var ang = Math.PI * 0.5, prevW = 5, prevD = 5;
+    var startPlat = slab(px, py, pz, 5, 5, B.FLAG.id);
+    plats.push(startPlat);
+
+    var COUNT = 34;
+    for (var i = 0; i < COUNT; i++) {
+      var t = i / (COUNT - 1);
+      // спираль: радиус сужается к центру, подъём равномерный
+      var targetR = 33 - t * 19;
+      var dxc = px - cx, dzc = pz - cz;
+      var distC = Math.sqrt(dxc * dxc + dzc * dzc) || 1;
+      var tangential = Math.atan2(dzc, dxc) + Math.PI / 2;
+      var pull = N.clamp((distC - targetR) * 0.06, -0.8, 0.8);
+      var want = tangential + pull;
+      var diff = ((want - ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      // поворот между платформами ограничен: иначе в прыжке не довернуть
+      ang += N.clamp(diff * 0.45 + (rnd() - 0.5) * 0.16, -0.34, 0.34);
+
+      var rest = (i > 0 && i % 9 === 0);
+      var beam = (!rest && i % 7 === 3);
+      var horiz = Math.abs(Math.cos(ang)) > Math.abs(Math.sin(ang));
+      // мостик кладём строго по оси и туда же разворачиваем маршрут,
+      // иначе по нему пришлось бы бежать наискосок и падать вбок
+      if (beam) ang = horiz ? (Math.cos(ang) > 0 ? 0 : Math.PI)
+                            : (Math.sin(ang) > 0 ? Math.PI / 2 : -Math.PI / 2);
+      var w, dd;
+      if (rest) { w = 6; dd = 6; }
+      else if (beam) { w = horiz ? 6 : 1; dd = horiz ? 1 : 6; }
+      else { w = (rnd() > 0.55 ? 3 : 2); dd = w; }
+
+      // подъём только на коротких прыжках, иначе не дотянуться
+      var rise = (!rest && i % 2 === 0) ? 1 : 0;
+      var gap = rest ? 0.9 : (rise ? 0.8 + rnd() * 0.5 : 0.9 + rnd() * 0.8);
+
+      // честный зазор: половины платформ считаем вдоль направления прыжка
+      var ax = Math.abs(Math.cos(ang)), az = Math.abs(Math.sin(ang));
+      var halfPrev = prevW / 2 * ax + prevD / 2 * az;
+      var halfCur = w / 2 * ax + dd / 2 * az;
+      var step = halfPrev + halfCur + gap;
+
+      px += Math.cos(ang) * step;
+      pz += Math.sin(ang) * step;
+      py += rise;
+      prevW = w; prevD = dd;
+
+      var id = MATS[(i + (rest ? 4 : 0)) % MATS.length];
+      var pl = slab(px, py, pz, w, dd, beam ? B.PLANKS.id : id);
+      px = pl.x; pz = pl.z;
+      pl.rest = rest; pl.beam = beam;
+      plats.push(pl);
+    }
+
+    // --- финишная площадка с башней ------------------------------
+    // отходим ещё на один прыжок, иначе колонна башни поглотит последнюю платформу
+    var axF = Math.abs(Math.cos(ang)), azF = Math.abs(Math.sin(ang));
+    var stepF = (prevW / 2 * axF + prevD / 2 * azF) + (7 / 2 * axF + 7 / 2 * azF) + 1.1;
+    px += Math.cos(ang) * stepF;
+    pz += Math.sin(ang) * stepF;
+    py += 1;
+    var top = slab(px, py, pz, 7, 7, B.COBBLE.id);
+    top.rest = true; top.finish = true;
+    plats.push(top);
+    px = top.x; pz = top.z;
+    // колонна до земли, чтобы площадка не висела в воздухе
+    var gx = Math.round(px), gz = Math.round(pz);
+    var gh = height[N.clamp(gz, 0, sz - 1) * sx + N.clamp(gx, 0, sx - 1)];
+    for (var cy = gh + 1; cy < py; cy++) {
+      for (var ox = -1; ox <= 1; ox++) for (var oz = -1; oz <= 1; oz++) {
+        if (vol.get(gx + ox, cy, gz + oz) === 0) {
+          vol.set(gx + ox, cy, gz + oz, (cy % 4 === 0) ? B.BRICK.id : B.COBBLE.id);
+        }
+      }
+    }
+
+    // --- деревья и валуны по краям острова -----------------------
+    for (var ti = 0; ti < 90; ti++) {
+      var tx = 3 + Math.floor(rnd() * (sx - 6)), tz = 3 + Math.floor(rnd() * (sz - 6));
+      var th = height[tz * sx + tx];
+      if (th <= WATER + 1.6 || surfBlock[tz * sx + tx] !== B.GRASS.id) continue;
+      var near = false;
+      for (var pi = 0; pi < plats.length; pi++) {
+        if (Math.abs(plats[pi].x - tx) < 5 && Math.abs(plats[pi].z - tz) < 5) { near = true; break; }
+      }
+      if (near) continue;
+      var trunkH = 4 + Math.floor(rnd() * 3);
+      for (var ty = 1; ty <= trunkH; ty++) vol.set(tx, th + ty, tz, B.LOG.id);
+      var tp = th + trunkH, rad = 2 + (rnd() > 0.6 ? 1 : 0);
+      for (var ly = -2; ly <= 2; ly++) for (var lx = -rad; lx <= rad; lx++) for (var lz = -rad; lz <= rad; lz++) {
+        var dl = Math.sqrt(lx * lx + lz * lz + ly * ly * 1.6);
+        if (dl > rad + 0.6 || (dl > rad - 0.2 && rnd() > 0.45)) continue;
+        if (lx === 0 && lz === 0 && ly < 1) continue;
+        if (vol.get(tx + lx, tp + ly, tz + lz) === 0) vol.set(tx + lx, tp + ly, tz + lz, B.LEAVES.id);
+      }
+    }
+
+    // --- сетка для ментов: ходят только по суше -------------------
+    var cw = Math.floor(sx / CELL), ch = Math.floor(sz / CELL);
+    var wallGrid = [];
+    for (var r = 0; r < ch; r++) {
+      wallGrid[r] = [];
+      for (var c = 0; c < cw; c++) {
+        var bx = c * CELL + 1, bz = r * CELL + 1;
+        var hh = height[N.clamp(bz, 0, sz - 1) * sx + N.clamp(bx, 0, sx - 1)];
+        wallGrid[r][c] = hh <= WATER + 0.6;
+      }
+    }
+
+    var startCell = [Math.floor(startPlat.x / CELL), Math.floor(startPlat.z / CELL)];
+    var exitCell = [N.clamp(Math.floor(top.x / CELL), 0, cw - 1), N.clamp(Math.floor(top.z / CELL), 0, ch - 1)];
+
+    return {
+      vol: vol, height: height, surfBlock: surfBlock,
+      sx: sx, sy: sy, sz: sz, wallH: 2,
+      wallGrid: wallGrid, cells: { w: cw, h: ch },
+      mazeX0: 0, mazeZ0: 0, CELL: CELL, BASE: BASE, WATER: WATER,
+      playerCell: startCell, exitCell: exitCell, copCells: [],
+      decor: [], lanterns: [], rnd: rnd,
+      parkour: true, platforms: plats,
+      startPos: { x: startPlat.x, y: startPlat.y, z: startPlat.z },
+      exitPos: { x: top.x, y: top.y, z: top.z }
+    };
+  }
+
   global.WORLD = {
-    init: init, generate: generate, buildMesh: buildMesh, Volume: Volume,
+    init: init, generate: generate, generateParkour: generateParkour, buildMesh: buildMesh, Volume: Volume,
     addGrassTufts: addGrassTufts, addWallVines: addWallVines,
     Mesher: Mesher, CELL: CELL, BASE: BASE, WATER: WATER, MARGIN: MARGIN,
     blocks: function () { return B; }
