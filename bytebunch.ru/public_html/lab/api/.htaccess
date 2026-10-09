@@ -1,0 +1,5 @@
+# При PHP через FastCGI Apache не передаёт заголовок Authorization — передаём сами.
+# Если не сработает, ключ можно прислать заголовком X-Api-Key.
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>

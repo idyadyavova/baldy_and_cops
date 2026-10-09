@@ -1,0 +1,9 @@
+# Секреты и данные сервера — в публичный репозиторий не попадают.
+private/config.php
+private/game.html
+private/rooms/
+private/lab/config.php
+private/lab/data/
+public_html/sionika/stats-data.php
+public_html/lab/media/*
+!public_html/lab/media/.htaccess

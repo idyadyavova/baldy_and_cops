@@ -1,0 +1,6 @@
+# Все адреса p/… обрабатывает index.php: он проверяет ключ и отдаёт файлы проекта из private/.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [L,QSA]
+</IfModule>
